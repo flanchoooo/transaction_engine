@@ -72,7 +72,7 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
     $app->get('cash_in',  'WalletCashInController@cash_in_business');
     $app->post('adjustment_preauth',  'WalletAdjustmentsController@adjustment_preauth');
     $app->post('adjustment',  'WalletEValueController@adjustment');
-    $app->post('destroy_value',  'WalletEValueController@e_value_destroy');
+    $app->post('create_value',  'WalletEValueController@create_value');
     $app->post('destroy_value',  'WalletEValueController@e_value_destroy');
 
     //Wallet

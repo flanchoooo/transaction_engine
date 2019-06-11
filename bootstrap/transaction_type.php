@@ -92,4 +92,7 @@ define('LINK_WALLET_TO_BR','14');
 define('BANK_TO_WALLET','15');
 define('SEND_MONEY','16');
 define('WALLET_TO_BANK','17');
+define('CREATE_VALUE','18');
+define('ZIPIT_SEND','19');
+define('ZIPIT_RECEIVE','20');
 

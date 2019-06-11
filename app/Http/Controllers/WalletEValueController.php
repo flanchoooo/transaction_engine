@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Jobs\SaveWalletTransaction;
 
+use App\Logs;
 use App\Wallet;
 use App\WalletTransactions;
 use Carbon\Carbon;
@@ -143,6 +144,13 @@ class WalletEValueController extends Controller
         ]);
 
 
+        Logs::create([
+            'description' => "Destroy e-value worth:$total_deductions for mobile:  $source->mobile",
+            'user' => $request->created_by,
+
+        ]);
+
+
         return response([
 
             'code' => '00',
@@ -153,6 +161,136 @@ class WalletEValueController extends Controller
 
 
     }
+
+    public function create_value(Request $request){
+
+
+        $validator = $this->create_value_validator($request->all());
+        if ($validator->fails()) {
+            return response()->json(['code' => '99', 'description' => $validator->errors()]);
+        }
+
+
+
+
+        $destination_mobile = Wallet::where('mobile',$request->destination_mobile)->get()->first();
+        $mobi = substr_replace($destination_mobile->mobile, '', -10, 3);
+        $time_stamp = Carbon::now()->format('ymdhis');
+        $reference = $request->bill_payment_id . $time_stamp . $mobi;
+
+
+        if(!isset($destination_mobile)){
+
+            return response([
+
+                'code' => '01',
+                'description' => 'Invalid destination account.',
+
+            ]) ;
+
+
+        }
+
+
+        $total_deductions = $request->amount / 100;
+
+
+
+
+        try {
+
+            DB::beginTransaction();
+
+
+            $new_balance = $destination_mobile->balance + $total_deductions;
+
+            $destination_mobile->lockForUpdate()->first();
+            $destination_mobile->balance =number_format((float)$new_balance, 4, '.', '');;
+            $destination_mobile->save();
+
+            //Deduct funds from source account
+            DB::commit();
+
+
+
+        } catch (\Exception $e){
+
+            DB::rollback();
+
+            WalletTransactions::create([
+
+                'txn_type_id'         => CREATE_VALUE,
+                'tax'                 => '0.00',
+                'revenue_fees'        => '0.00',
+                'interchange_fees'    => '0.00',
+                'zimswitch_fee'       => '0.00',
+                'transaction_amount'  => '0.00',
+                'total_debited'       => '0.00',
+                'total_credited'      => $total_deductions,
+                'batch_id'            => $reference,
+                'switch_reference'    => $reference,
+                'merchant_id'         => '',
+                'transaction_status'  => 0,
+                'account_debited'     => $destination_mobile->mobile,
+                'pan'                 => '',
+                'merchant_account'    => '',
+                'description'        => 'Transaction was reversed',
+
+
+            ]);
+
+
+            return response([
+
+                'code' => '01',
+                'description' => 'Transaction was reversed',
+
+            ]) ;
+
+        }
+
+
+        WalletTransactions::create([
+
+            'txn_type_id'         => CREATE_VALUE,
+            'tax'                 => '0.00',
+            'revenue_fees'        => '0.00',
+            'interchange_fees'    => '0.00',
+            'zimswitch_fee'       => '0.00',
+            'transaction_amount'  => '0.00',
+            'total_debited'       => $total_deductions,
+            'total_credited'      => '',
+            'batch_id'            => $reference,
+            'switch_reference'    => $reference,
+            'merchant_id'         => '',
+            'transaction_status'  => 1,
+            'account_debited'     => '',
+            'pan'                 => '',
+            'merchant_account'    => '',
+            'account_credited'    => $destination_mobile->mobile,
+
+
+        ]);
+
+
+        Logs::create([
+            'description' => "Created e-value worth:$total_deductions for mobile:$destination_mobile->mobile",
+            'user' => $request->created_by,
+
+        ]);
+
+
+        return response([
+
+            'code' => '00',
+            'description' => 'E-Value was successfully created.'
+        ]) ;
+
+
+
+
+    }
+
 
     public function adjustment(Request $request){
 
@@ -252,6 +390,9 @@ class WalletEValueController extends Controller
 
             ]);
 
+
+
+
             return response([
 
                 'code' => '01',
@@ -282,12 +423,18 @@ class WalletEValueController extends Controller
             'account_credited'    => $destination->mobile,
             'pan'                 => '',
             'merchant_account'    => '',
+            'description'         => $request->narration
 
 
         ]);
 
 
 
+        Logs::create([
+            'description' => "Created e-value worth:$total_deductions for mobile:$destination->mobile",
+            'user' => $request->created_by,
+
+        ]);
 
 
         return response([
@@ -302,15 +449,13 @@ class WalletEValueController extends Controller
     }
 
 
-
-
-
-
     protected function ajustment_validator(Array $data)
     {
         return Validator::make($data, [
             'source_mobile' => 'required',
             'destination_mobile' => 'required',
+            'narration' => 'required',
+            'amount' => 'required',
 
 
 
@@ -324,6 +469,20 @@ class WalletEValueController extends Controller
         return Validator::make($data, [
             'source_mobile' => 'required',
             'amount' => 'required|integer|min:0',
+
+
+
+        ]);
+
+
+    }
+
+    protected function create_value_validator(Array $data)
+    {
+        return Validator::make($data, [
+            'destination_mobile' => 'required',
+            'amount' => 'required|integer|min:0',
+            'created_by' => 'required',
 
 
 
