@@ -61,13 +61,15 @@ class WalletController extends Controller
 
 
 
-        if ($mobile_number_length = 10){
+       /* if ($mobile_number_length = 10){
 
            $out = ltrim($request->mobile, "0");
            $mobile_code = License::find(1);
            $mobile = $mobile_code->mobile_code.$out;
 
         }
+
+       */
 
 
 
@@ -79,7 +81,7 @@ class WalletController extends Controller
 
              Wallet::create([
 
-               'mobile' => $mobile,
+               'mobile' => $request->mobile,
                'account_number' => $account_number,
                'first_name' => $request->first_name,
                'last_name' => $request->last_name,

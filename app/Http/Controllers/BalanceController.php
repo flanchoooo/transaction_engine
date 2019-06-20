@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 
 use App\Accounts;
 use App\Devices;
+use App\Employee;
 use App\Jobs\PostWalleBalanceEnqJob;
 use App\Jobs\SaveTransaction;
 use App\License;
@@ -42,17 +43,28 @@ class BalanceController extends Controller
 
         $validator = $this->balance_enquiry($request->all());
         if ($validator->fails()) {
-            return response()->json([
-                'code' => '99',
-                'description' => $validator->errors()]);
+            return response()->json(['code' => '99', 'description' => $validator->errors()]);
         }
 
         $currency = License::find(1);
-
         $branch_id = substr($request->account_number, 0, 3);
         $card_details = LuhnCards::where('track_1', $request->card_number)->get()->first();
         $merchant_id = Devices::where('imei', $request->imei)->first();
+        $employee_id = Employee::where('imei', $request->imei)->first();
 
+        if(!isset($merchant_id)){
+
+            return response([
+                'code'        => '01',
+                'description' => 'Invalid device imei',
+
+            ]);
+        }
+
+        if(isset($employee_id)){
+
+            $user_id = $employee_id->id;
+        }
 
 
 
@@ -226,6 +238,7 @@ class BalanceController extends Controller
                 'transaction_status'  => 1,
                 'account_debited'     => $source->mobile,
                 'pan'                 => $request->card_number,
+                'employee_id'         => $user_id,
 
 
             ]);
@@ -245,11 +258,9 @@ class BalanceController extends Controller
         }
 
 
+
         if (isset($request->imei)) {
 
-
-
-            //return 1;
             try {
 
                 $user = new Client();
@@ -303,11 +314,9 @@ class BalanceController extends Controller
 
                     ]);
 
-                } else {
+                }  else
 
-
-
-
+                    {
 
                     //Balance Enquiry On Us Debit Fees
                     $fees_result = FeesCalculatorService::calculateFees(
@@ -354,10 +363,43 @@ class BalanceController extends Controller
                         //return $response_ = $result->getBody()->getContents();
                         $response = json_decode($result->getBody()->getContents());
 
-                        if ($response->code == '00') {
+
+                       if($response->code != '00'){
+
+                           Transactions::create([
+
+                               'txn_type_id'         => 1,
+                               'tax'                 => '0.00',
+                               'revenue_fees'        => '0.00',
+                               'interchange_fees'    => '0.00',
+                               'zimswitch_fee'       => '0.00',
+                               'transaction_amount'  => '0.00',
+                               'total_debited'       => '0.00',
+                               'total_credited'      => '0.00',
+                               'batch_id'            => '',
+                               'switch_reference'    => '',
+                               'merchant_id'         => $merchant_id->merchant_id,
+                               'transaction_status'  => 0,
+                               'account_debited'     => $request->account_number,
+                               'pan'                 => $request->card_number,
+
+
+                           ]);
+
+                           return response([
+                               'code'        => '100',
+                               'description' => 'Failed to process transaction',
+
+                           ]);
+
+                       }
+
+
+
 
                           //Record Txn
-                          Transactions::create([
+
+                        Transactions::create([
 
                               'txn_type_id'         => BALANCE_ON_US,
                               'tax'                 => '0.00',
@@ -373,9 +415,11 @@ class BalanceController extends Controller
                               'transaction_status'  => 1,
                               'account_debited'     => $request->account_number,
                               'pan'                 => $request->card_number,
+                              'employee_id'         => $user_id,
 
 
                           ]);
+
 
                             return response([
 
@@ -388,7 +432,7 @@ class BalanceController extends Controller
                             ]);
 
 
-                        }
+
 
                     } catch (ClientException $exception) {
 
@@ -518,6 +562,7 @@ class BalanceController extends Controller
        // $card_number = str_limit($request->card_number, 16, '');
         $branch_id = substr($request->account_number, 0, 3);
         $card_details = LuhnCards::where('track_1', $request->card_number)->get()->first();
+
 
 
         if(isset($card_details->wallet_id)){
@@ -792,8 +837,40 @@ class BalanceController extends Controller
                     //$response_ = $result->getBody()->getContents();
                     $response = json_decode($result->getBody()->getContents());
 
-                    if ($response->code == '00') {
 
+                    if($response->code != '00'){
+
+
+                        Transactions::create([
+
+                            'txn_type_id'         => BALANCE_ENQUIRY_OFF_US,
+                            'tax'                 => '0.00',
+                            'revenue_fees'        => $fees_result['fees_charged'],
+                            'interchange_fees'    => '0.00',
+                            'zimswitch_fee'       => $fees_result['zimswitch_fee'],
+                            'transaction_amount'  => '0.00',
+                            'total_debited'       => $fees_result['fees_charged'],
+                            'total_credited'      => $fees_result['fees_charged'],
+                            'batch_id'            => $response->transaction_batch_id,
+                            'switch_reference'    => $response->transaction_batch_id,
+                            'merchant_id'         => '',
+                            'transaction_status'  => 0,
+                            'account_debited'     => $request->account_number,
+                            'pan'                 => $request->card_number,
+                            'description'         => 'BALANCE ENQUIRY OFF US',
+
+
+                        ]);
+
+                        return response([
+                            'code'        => '100',
+                            'description' => 'Failed to process transaction.',
+
+
+                        ]);
+
+
+                    }
 
 
                         Transactions::create([
@@ -827,7 +904,6 @@ class BalanceController extends Controller
                         ]);
 
 
-                    }
 
                 } catch (ClientException $exception) {
 
@@ -914,7 +990,35 @@ class BalanceController extends Controller
                     //$response_ = $result->getBody()->getContents();
                     $response = json_decode($result->getBody()->getContents());
 
-                    if ($response->code == '00') {
+
+                   if($response->code != '00'){
+
+                       Transactions::create([
+
+                           'txn_type_id'         => BALANCE_ENQUIRY_OFF_US,
+                           'tax'                 => '0.00',
+                           'revenue_fees'        => $fees_result['fees_charged'],
+                           'interchange_fees'    => '0.00',
+                           'zimswitch_fee'       => $fees_result['zimswitch_fee'],
+                           'transaction_amount'  => '0.00',
+                           'total_debited'       => $fees_result['fees_charged'],
+                           'total_credited'      => $fees_result['fees_charged'],
+                           'batch_id'            => $response->transaction_batch_id,
+                           'switch_reference'    => $response->transaction_batch_id,
+                           'merchant_id'         => '',
+                           'transaction_status'  => 0,
+                           'account_debited'     => $request->account_number,
+                           'pan'                 => $request->card_number,
+                           'description'         => 'Failed to process transaction.',
+
+
+
+                       ]);
+
+
+                   }
+
+
 
 
                         Transactions::create([
@@ -933,11 +1037,10 @@ class BalanceController extends Controller
                             'transaction_status'  => 0,
                             'account_debited'     => $request->account_number,
                             'pan'                 => $request->card_number,
-                            'description'         => 'Insufficient Funds',
+
 
 
                         ]);
-
 
 
 
@@ -952,7 +1055,7 @@ class BalanceController extends Controller
                         ]);
 
 
-                    }
+
 
                 } catch (ClientException $exception) {
 
@@ -1068,7 +1171,6 @@ class BalanceController extends Controller
     protected function balance_enquiry(Array $data){
         return Validator::make($data, [
             'card_number' => 'required',
-            'account_number' => 'required',
             'imei'        => 'required',
 
         ]);
@@ -1076,9 +1178,7 @@ class BalanceController extends Controller
 
     protected function balance_enquiry_off_us(Array $data){
         return Validator::make($data, [
-            'account_number' => 'required',
             'card_number'    => 'required',
-
 
         ]);
     }

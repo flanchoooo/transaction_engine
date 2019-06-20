@@ -4,9 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Accounts;
 use App\Devices;
-use App\Fee;
+use App\Employee;
 use App\Jobs\PostWalletPurchaseJob;
-use App\Jobs\SaveTransaction;
 use App\LuhnCards;
 use App\MerchantAccount;
 use App\Services\BalanceEnquiryService;
@@ -14,7 +13,6 @@ use App\Services\FeesCalculatorService;
 use App\Services\TokenService;
 use App\Transaction;
 use App\Transactions;
-use App\TransactionType;
 use App\Wallet;
 use App\WalletCOS;
 use App\WalletPostPurchaseTxns;
@@ -37,8 +35,6 @@ class PurchaseController extends Controller
      * When user success login will retrive callback as api_token
      */
 
-
-
     public function purchase(Request $request)
     {
 
@@ -49,8 +45,34 @@ class PurchaseController extends Controller
         }
 
         $card_details = LuhnCards::where('track_1', $request->card_number)->get()->first();
+        $employee_id = Employee::where('imei', $request->imei)->get()->first();
+        $merchant_id = Devices::where('imei', $request->imei)->first();
+        $merchant_account = MerchantAccount::where('merchant_id',$merchant_id->merchant_id)->first();
 
 
+        if(!isset($merchant_id)){
+
+            return response([
+                'code'        => '01',
+                'description' => 'Invalid device imei',
+
+            ]);
+        }
+
+        if(!isset($merchant_account)){
+
+            return response([
+                'code'        => '01',
+                'description' => 'Merchant account not configured.',
+
+            ]);
+
+        }
+
+        if(isset($employee_id)){
+
+            $user_id = $employee_id->id;
+        }
 
         if(isset($card_details->wallet_id)){
 
@@ -240,6 +262,7 @@ class PurchaseController extends Controller
                 'transaction_status'  => 1,
                 'account_debited'     => $source->mobile,
                 'pan'                 => $request->card_number,
+                'employee_id'         =>$user_id,
 
 
             ]);
@@ -266,12 +289,6 @@ class PurchaseController extends Controller
         //On Us Purchase Txn Getbucks Card on Getbucks POS
         if(isset($request->imei)) {
 
-           // $card_number = str_limit($request->card_number,16,'');
-            $merchant_id = Devices::where('imei', $request->imei)->first();
-            $merchant_account = MerchantAccount::where('merchant_id',$merchant_id->merchant_id)->first();
-
-            //Merchant account
-            $merchant_account->account_number;
 
             try {
 
@@ -374,15 +391,7 @@ class PurchaseController extends Controller
 
                     ]);
 
-                } else {
-
-
-
-                    //Balance Enquiry On Us Debit Fees
-
-
-                    $merchant_id = Devices::where('imei', $request->imei)->first();
-                    $merchant_account = MerchantAccount::where('merchant_id',$merchant_id->merchant_id)->first();
+                }
 
 
                     $revenue = Accounts::find(2);
@@ -469,7 +478,40 @@ class PurchaseController extends Controller
                         //$response_ = $result->getBody()->getContents();
                         $response = json_decode($result->getBody()->getContents());
 
-                        if ($response->code == '00') {
+                        if ($response->code != '00'){
+
+                            Transactions::create([
+
+                                'txn_type_id'         => PURCHASE_ON_US,
+                                'tax'                 =>  $fees_charged['tax'],
+                                'revenue_fees'        => $revenue,
+                                'interchange_fees'    => '0.00',
+                                'zimswitch_fee'       => '0.00',
+                                'transaction_amount'  => $request->amount /100,
+                                'total_debited'       => $total_funds,
+                                'total_credited'      => $total_funds,
+                                'batch_id'            => $response->transaction_batch_id,
+                                'switch_reference'    => $response->transaction_batch_id,
+                                'merchant_id'         => $merchant_id->merchant_id,
+                                'transaction_status'  => 0,
+                                'account_debited'     => $request->account_number,
+                                'pan'                 => $request->card_number,
+                                'merchant_account'    => 'Failed to process transaction',
+                                'employee_id'         => $user_id,
+
+                            ]);
+
+
+                            return response([
+
+                                'code' => '100',
+                                'description' => 'Failed to process transaction'
+
+
+                            ]);
+
+
+                        }
 
 
                             $revenue = $fees_charged['mdr']  +  $fees_charged['acquirer_fee'];
@@ -491,8 +533,8 @@ class PurchaseController extends Controller
                                 'transaction_status'  => 1,
                                 'account_debited'     => $request->account_number,
                                 'pan'                 => $request->card_number,
-                                'description'         => 'Insufficient Funds',
                                 'merchant_account'    => $merchant_amount,
+                                'employee_id'         => $user_id,
 
                             ]);
 
@@ -508,7 +550,7 @@ class PurchaseController extends Controller
                             ]);
 
 
-                        }
+
 
                     } catch (ClientException $exception) {
 
@@ -546,7 +588,7 @@ class PurchaseController extends Controller
 
                     }
 
-                }
+
 
 
             } catch (RequestException $e) {
@@ -644,7 +686,6 @@ class PurchaseController extends Controller
 
 
         $card_details = LuhnCards::where('track_1', $request->card_number)->get()->first();
-
 
 
         if(isset($card_details->wallet_id)){
@@ -863,12 +904,6 @@ class PurchaseController extends Controller
         }
 
 
-        //Deduct Funds
-
-
-
-
-
         try {
 
 
@@ -933,21 +968,15 @@ class PurchaseController extends Controller
                 ]
             ]);
 
+            //$balance_response = $result->getBody()->getContents();
+
             $balance_response = json_decode($result->getBody()->getContents());
 
 
 
-
-
-
-            //Balance Enquiry On Us Debit Fees
-
-
-
-
-
             $total_funds = $fees_charged['fees_charged'] + ($request->amount /100);
-            // Check if client has enough funds.
+
+
             if ($balance_response->available_balance < $total_funds) {
 
                 Transactions::create([
@@ -977,7 +1006,7 @@ class PurchaseController extends Controller
 
                 ]);
 
-            } else {
+            }
 
 
                 $zimswitch = Accounts::find(1);
@@ -1060,7 +1089,40 @@ class PurchaseController extends Controller
                     //return $response_ = $result->getBody()->getContents();
                     $response = json_decode($result->getBody()->getContents());
 
-                    if ($response->code == '00') {
+                    if ($response->code != '00')
+                    {
+
+                        Transactions::create([
+
+                            'txn_type_id'         => PURCHASE_OFF_US,
+                            'tax'                 =>  $fees_charged['tax'],
+                            'revenue_fees'        => $revenue,
+                            'interchange_fees'    => $fees_charged['interchange_fee'],
+                            'zimswitch_fee'       => $credit_zimswitch_account,
+                            'transaction_amount'  => $request->amount /100,
+                            'total_debited'       => $total_funds,
+                            'total_credited'      => $total_funds,
+                            'batch_id'            => $response->transaction_batch_id,
+                            'switch_reference'    => $response->transaction_batch_id,
+                            'merchant_id'         => '',
+                            'transaction_status'  => 1,
+                            'account_debited'     => $request->account_number,
+                            'pan'                 => $request->card_number,
+                            'description'         => 'Failed to process transaction.'
+
+                        ]);
+
+
+                        return response([
+
+                            'code' => '100',
+                            'description' => 'Failed to process transaction.'
+
+
+                        ]);
+
+
+                    }
 
 
 
@@ -1098,7 +1160,7 @@ class PurchaseController extends Controller
                         ]);
 
 
-                    }
+
 
                 } catch (ClientException $exception) {
 
@@ -1133,7 +1195,7 @@ class PurchaseController extends Controller
 
                 }
 
-            }
+
 
 
         } catch (RequestException $e) {
@@ -1220,7 +1282,6 @@ class PurchaseController extends Controller
     }
 
 
-
     public function purchase_cashback(Request $request)
     {
 
@@ -1229,292 +1290,37 @@ class PurchaseController extends Controller
             return response()->json(['code' => '99', 'description' => $validator->errors()]);
         }
 
-       /* if(isset($request->bin)) {
 
-            $card_number = str_limit($request->card_number, 16, '');
-            $amount = $request->amount / 100;
-            $cash_back_amount = $request->cashback_amount / 100;
 
-            $merchant_id = Devices::where('imei', $request->imei)->first();
-            $merchant_account = MerchantAccount::where('merchant_id', $merchant_id->merchant_id)->first();
-            $branch_id = substr( $merchant_account->account_number, 0, 3);
-
-            $merchant_account->account_number;
-
-            //Balance Enquiry On Us Debit Fees
-
-
-            try {
-
-
-                $fees_result = FeesCalculatorService::calculateFees(
-                    $amount,
-                    $cash_back_amount,
-                    '49',
-                    $merchant_id->merchant_id
-
-                );
-
-                $total_funds = $request->amount / 100 + $request->cashback_amount / 100 +
-                    $fees_result['interchange_fee'] + $fees_result['acquirer_fee'];
-                // Check if client has enough funds.
-
-                $revenue = Accounts::find(2);
-                $zimswitch = Accounts::find(1);
-
-
-                $debit_zimswitch = array('SerialNo' => '472100',
-                    'OurBranchID' => $branch_id,
-                    'AccountID' => $zimswitch->account_number,
-                    'TrxDescriptionID' => '007',
-                    'TrxDescription' => 'Purchase + Cash back bank x, debit zimswitch',
-                    'TrxAmount' => '-' . $total_funds );
-
-                $credit_merchant_purchase = array('SerialNo' => '472100',
-                    'OurBranchID' => $branch_id,
-                    'AccountID' => $merchant_account->account_number,
-                    'TrxDescriptionID' => '008',
-                    'TrxDescription' => 'Purchase + Cash back bank x, credit merchant purchase amount',
-                    'TrxAmount' => $request->amount / 100);
-
-                $credit_merchant_cash = array('SerialNo' => '472100',
-                    'OurBranchID' => $branch_id,
-                    'AccountID' => $merchant_account->account_number,
-                    'TrxDescriptionID' => '008',
-                    'TrxDescription' => 'Purchase + Cash back bank x, credit merchant cash amount',
-                    'TrxAmount' => $request->cashback_amount / 100);
-
-                $credit_revenue = array('SerialNo' => '472100',
-                    'OurBranchID' => $branch_id,
-                    'AccountID' => $revenue->account_number,
-                    'TrxDescriptionID' => '008',
-                    'TrxDescription' => 'Purchase + Cash back bank x, credit revenue',
-                    'TrxAmount' =>$fees_result['interchange_fee'] + $fees_result['acquirer_fee']);
-
-                $debit_merchant_mdr = array('SerialNo' => '472100',
-                    'OurBranchID' => $branch_id,
-                    'AccountID' => $merchant_account->account_number,
-                    'TrxDescriptionID' => '007',
-                    'TrxDescription' => 'Purchase + Cash back bank x, debit merchant  mdr fees',
-                    'TrxAmount' => '-' . $fees_result['mdr']);
-
-
-                $credit_revenue_mdr = array('SerialNo' => '472100',
-                    'OurBranchID' => $branch_id,
-                    'AccountID' => $merchant_account->account_number,
-                    'TrxDescriptionID' => '008',
-                    'TrxDescription' => 'Purchase + Cash back bank x, credit merchant purchase amount',
-                    'TrxAmount' => $fees_result['mdr']);
-
-
-
-
-
-
-                $auth = TokenService::getToken();
-                $client = new Client();
-
-                try {
-                    $result = $client->post(env('BASE_URL') . '/api/internal-transfer', [
-
-                        'headers' => ['Authorization' => $auth, 'Content-type' => 'application/json',],
-                        'json' => [
-                            'bulk_trx_postings' => array(
-                                $debit_zimswitch,
-                                $credit_merchant_purchase,
-                                $credit_merchant_cash,
-                                $credit_revenue,
-                                $debit_merchant_mdr,
-                                $credit_revenue_mdr,
-                            ),
-                        ]
-
-                    ]);
-
-
-                   // return $response_ = $result->getBody()->getContents();
-                    $response = json_decode($result->getBody()->getContents());
-
-                    if ($response->code == '00') {
-
-
-
-
-                        Transaction::create([
-
-                            'transaction_type' => '49',
-                            'status' => 'COMPLETED',
-                            'account' => $zimswitch->account_number,
-                            'pan' => $card_number,
-                            'credit' =>'0.00' ,
-                            'debit' => $total_funds,
-                            'description' => 'Purchase + Cash back bank x, debit zimswitch',
-                            'fee' => '0.00',
-                            'batch_id' => $response->transaction_batch_id,
-                            'merchant' => $request->imei,
-                        ]);
-
-
-                        Transaction::create([
-
-                            'transaction_type' => '50',
-                            'status' => 'COMPLETED',
-                            'account' => $merchant_account->account_number,
-                            'pan' => $card_number,
-                            'credit' => $request->amount / 100,
-                            'debit' => '0.00',
-                            'description' => 'Purchase + Cash back bank x, credit merchant purchase amount',
-                            'fee' => '0.00',
-                            'batch_id' => $response->transaction_batch_id,
-                            'merchant' => $request->imei,
-                        ]);
-
-                        Transaction::create([
-
-                            'transaction_type' => '51',
-                            'status' => 'COMPLETED',
-                            'account' => $merchant_account->account_number,
-                            'pan' => $card_number,
-                            'credit' => $request->cashback_amount / 100,
-                            'debit' => '0.00',
-                            'description' => 'Purchase + Cash back bank x, credit merchant cash amount',
-                            'fee' => '0.00',
-                            'batch_id' => $response->transaction_batch_id,
-                            'merchant' => $request->imei,
-                        ]);
-
-
-                        Transaction::create([
-
-                            'transaction_type' => '52',
-                            'status' => 'COMPLETED',
-                            'account' => $revenue->account_number,
-                            'pan' => $card_number,
-                            'credit' =>$fees_result['interchange_fee'] + $fees_result['acquirer_fee'],
-                            'debit' => '0.00',
-                            'description' => 'Purchase + Cash back bank x, credit revenue',
-                            'fee' => '0.00',
-                            'batch_id' => $response->transaction_batch_id,
-                            'merchant' => $request->imei,
-                        ]);
-
-
-                        Transaction::create([
-
-                            'transaction_type' => '53',
-                            'status' => 'COMPLETED',
-                            'account' => $merchant_account->account_number,
-                            'pan' => $card_number,
-                            'credit' =>'0.00',
-                            'debit' => $fees_result['mdr'],
-                            'description' => 'Purchase + Cash back bank x, debit merchant  mdr fees',
-                            'fee' => '0.00',
-                            'batch_id' => $response->transaction_batch_id,
-                            'merchant' => $request->imei,
-                        ]);
-
-
-                        Transaction::create([
-
-                            'transaction_type' => '54',
-                            'status' => 'COMPLETED',
-                            'account' => $revenue->account_number,
-                            'pan' => $card_number,
-                            'credit' => $fees_result['mdr'],
-                            'debit' => '0.00',
-                            'description' => 'Purchase + Cash back bank x, credit revenue  mdr fees',
-                            'fee' => '0.00',
-                            'batch_id' => $response->transaction_batch_id,
-                            'merchant' => $request->imei,
-                        ]);
-
-
-                        return response([
-
-                            'code' => '00',
-                            'batch_id' => (string)$response->transaction_batch_id,
-                            'description' => 'Success'
-
-
-                        ]);
-
-
-                    }
-
-                } catch (ClientException $exception) {
-
-                    Transaction::create([
-
-                        'transaction_type' => '14',
-                        'status' => 'FAILED',
-                        'account' => $request->account_number,
-                        'pan' => $card_number,
-                        'credit' => '0.00',
-                        'debit' => '0.00',
-                        'description' => 'Failed to process the transaction contact admin.',
-                        'fee' => '0.00',
-                        'batch_id' => '',
-                        'merchant' => $request->imei,
-                    ]);
-
-
-                    return array('code' => '91',
-                        'error' => $exception);
-
-
-                }
-
-            } catch (RequestException $e) {
-                if ($e->hasResponse()) {
-                    $exception = (string)$e->getResponse()->getBody();
-                    $exception = json_decode($exception);
-
-
-                    Transaction::create([
-
-                        'transaction_type' => '14',
-                        'status' => 'FAILED',
-                        'account' => $request->account_number,
-                        'pan' => $card_number,
-                        'credit' => '0.00',
-                        'debit' => '0.00',
-                        'description' => "BR. Net Error: $exception->message",
-                        'fee' => '0.00',
-                        'batch_id' => '',
-                        'merchant' => $request->imei,
-                    ]);
-
-
-                    return array('code' => '91',
-                        'error' => $exception);
-
-                    //return new JsonResponse($exception, $e->getCode());
-                } else {
-                    return array('code' => '01',
-                        'error' => $e->getMessage());
-                    //return new JsonResponse($e->getMessage(), 503);
-                }
-            }
-
-        } */
-
-
-
-        //On Us Purchase Txn Getbucks Card on Getbucks POS
-        if(isset($request->imei)) {
 
             $card_number = str_limit($request->card_number,16,'');
-           // $amount =  $request->amount / 100;
+            //$amount =  $request->amount / 100;
             $cash_back_amount =  $request->cashback_amount / 100;
 
 
             $merchant_id = Devices::where('imei', $request->imei)->first();
             $merchant_account = MerchantAccount::where('merchant_id',$merchant_id->merchant_id)->first();
-
-            //Merchant account
             $merchant_account->account_number;
+            $employee_id = Employee::where('imei', $request->imei)->first();
 
-            //Balance Enquiry On Us Debit Fees
+            if(!isset($merchant_id)){
+
+            return response([
+                'code'        => '01',
+                'description' => 'Invalid device imei',
+
+            ]);
+
+
+            }
+
+        if(isset($employee_id)){
+
+            $user_id = $employee_id->id;
+
+        }
+
+
             try {
 
 
@@ -1581,7 +1387,7 @@ class PurchaseController extends Controller
 
 
 
-                $total_funds = $request->amount / 100 + $request->cashback_amount / 100 +  $fees_result['fees_charged'];
+                 $total_funds = $request->amount / 100 + $request->cashback_amount / 100 +  $fees_result['fees_charged'];
 
                 // Check if client has enough funds.
                 if ($balance_response->available_balance < $total_funds) {
@@ -1613,8 +1419,7 @@ class PurchaseController extends Controller
 
                     ]);
 
-                } else {
-
+                }
 
 
                     $revenue = Accounts::find(2);
@@ -1731,7 +1536,44 @@ class PurchaseController extends Controller
                         //$response_ = $result->getBody()->getContents();
                         $response = json_decode($result->getBody()->getContents());
 
-                        if ($response->code == '00') {
+                        if($response->code != '00'){
+
+                            Transactions::create([
+
+                                'txn_type_id'         => PURCHASE_CASH_BACK_ON_US,
+                                'tax'                 => '0.00',
+                                'revenue_fees'        => '0.00',
+                                'interchange_fees'    => '0.00',
+                                'zimswitch_fee'       => '0.00',
+                                'transaction_amount'  => '0.00',
+                                'total_debited'       => '0.00',
+                                'total_credited'      => '0.00',
+                                'batch_id'            => '',
+                                'switch_reference'    => '',
+                                'merchant_id'         => $merchant_id->merchant_id,
+                                'transaction_status'  => 0,
+                                'account_debited'     => $request->account_number,
+                                'pan'                 => $card_number,
+                                'merchant_account'    => '',
+                                'description'         => 'Failed to process transaction.',
+
+
+
+                            ]);
+
+                            return response([
+
+                                'code' => '000',
+                                'description' => 'Failed to process transaction.'
+
+
+                            ]);
+
+
+
+                        }
+
+
 
 
                             $total_txn_amount = $request->amount / 100 + $request->cashback_amount / 100;
@@ -1756,15 +1598,12 @@ class PurchaseController extends Controller
                                 'account_debited'     => $request->account_number,
                                 'pan'                 => $card_number,
                                 'merchant_account'    => $merchant_account_amount,
+                                'employee_id'         => $user_id,
+                                'cash_back_amount'    => $cash_back_amount,
 
 
 
                             ]);
-
-
-
-
-
 
 
 
@@ -1778,7 +1617,7 @@ class PurchaseController extends Controller
                             ]);
 
 
-                        }
+
 
                     } catch (ClientException $exception) {
 
@@ -1814,7 +1653,7 @@ class PurchaseController extends Controller
 
                     }
 
-                }
+
 
 
             } catch (RequestException $e) {
@@ -1886,11 +1725,10 @@ class PurchaseController extends Controller
                 }
             }
 
-        }
+
 
 
     }
-
 
 
     public function purchase_cash_back_off_us(Request $request)
@@ -1902,10 +1740,8 @@ class PurchaseController extends Controller
         }
 
 
-
         $card_number = str_limit($request->card_number,16,'');
         $branch_id = substr($request->account_number, 0, 3);
-
 
         try {
 
@@ -1946,7 +1782,7 @@ class PurchaseController extends Controller
 
                 Transactions::create([
 
-                    'txn_type_id'         => PURCHASE_ON_US,
+                    'txn_type_id'         => PURCHASE_CASH_BACK_OFF_US,
                     'tax'                 => '0.00',
                     'revenue_fees'        => '0.00',
                     'interchange_fees'    => '0.00',
@@ -1973,10 +1809,10 @@ class PurchaseController extends Controller
             }
 
 
-// deductable amt = amount = variable????
-            $deductable_funds =   $request->amount / 100 + $request->cashback_amount / 100 +
-
-                $fees_charged['fees_charged'];
+            // deductable amt = amount = variable????
+            $deductable_funds = $request->amount / 100 +
+                                $request->cashback_amount / 100 +
+                                $fees_charged['fees_charged'];
 
             // Check if client has enough funds.
             if ($balance_response->available_balance < $deductable_funds) {
@@ -2008,18 +1844,19 @@ class PurchaseController extends Controller
 
                 ]);
 
-            } else {
-
-
+            }
 
                 $revenue = Accounts::find(2);
                 $tax = Accounts::find(3);
                 $zimswitch = Accounts::find(1);
 
 
-                $zimswitch_amount = $request->amount/100 + $request->cashback_amount/100 +
-                    $fees_charged['zimswitch_fee'] + $fees_charged['acquirer_fee']  +
-                    $fees_charged['cash_back_fee'];
+                $zimswitch_amount = $request->amount/100 +
+                                    $request->cashback_amount/100 +
+                                    $fees_charged['zimswitch_fee'] +
+                                    $fees_charged['acquirer_fee']  +
+                                    $fees_charged['cash_back_fee'];
+
 
                 $debit_client_amount = array('SerialNo' => '472100',
                     'OurBranchID' => substr($request->account_number, 0, 3),
@@ -2099,7 +1936,40 @@ class PurchaseController extends Controller
                     //return $response_ = $result->getBody()->getContents();
                     $response = json_decode($result->getBody()->getContents());
 
-                    if ($response->code == '00') {
+                    if($response->code != '00'){
+
+                        Transactions::create([
+
+                            'txn_type_id'         => PURCHASE_CASH_BACK_OFF_US,
+                            'tax'                 => '0.00',
+                            'revenue_fees'        => '0.00',
+                            'interchange_fees'    => '0.00',
+                            'zimswitch_fee'       => '0.00',
+                            'transaction_amount'  => '0.00',
+                            'total_debited'       => '0.00',
+                            'total_credited'      => '0.00',
+                            'batch_id'            => '',
+                            'switch_reference'    => '',
+                            'merchant_id'         => '',
+                            'transaction_status'  => 0,
+                            'account_debited'     => '',
+                            'pan'                 => $card_number,
+                            'merchant_account'    => '',
+                            'description'         => 'Failed to process transaction',
+                        ]);
+
+
+                        return response([
+
+                            'code' => '100',
+                            'description' => 'Failed to process transaction',
+
+
+                        ]);
+
+                    }
+
+
 
                         $transaction_amount = $request->amount /100 + $request->cashback_amount/100;
                         $revenue = $fees_charged['mdr']  +  $fees_charged['acquirer_fee'] + $fees_charged['interchange_fee'];
@@ -2122,11 +1992,9 @@ class PurchaseController extends Controller
                             'transaction_status'  => 1,
                             'account_debited'     => $request->account_number,
                             'pan'                 => $card_number,
-                            'description'         => 'Insufficient Funds',
                             'merchant_account'    => $merchant_amount,
 
                         ]);
-
 
 
                         return response([
@@ -2139,7 +2007,7 @@ class PurchaseController extends Controller
                         ]);
 
 
-                    }
+
 
                 } catch (ClientException $exception) {
 
@@ -2174,7 +2042,7 @@ class PurchaseController extends Controller
 
                 }
 
-            }
+
 
 
         } catch (RequestException $e) {
@@ -2218,7 +2086,7 @@ class PurchaseController extends Controller
 
                 Transactions::create([
 
-                    'txn_type_id'         => PURCHASE_ON_US,
+                    'txn_type_id'         => PURCHASE_CASH_BACK_OFF_US,
                     'tax'                 => '0.00',
                     'revenue_fees'        => '0.00',
                     'interchange_fees'    => '0.00',
@@ -2271,7 +2139,6 @@ class PurchaseController extends Controller
     protected function purchase_validation(Array $data)
     {
         return Validator::make($data, [
-            'account_number' => 'required',
             'amount' => 'required',
             'card_number' => 'required',
 
@@ -2281,7 +2148,6 @@ class PurchaseController extends Controller
     protected function purchase_off_us_validation(Array $data)
     {
         return Validator::make($data, [
-            'account_number' => 'required',
             'amount' => 'required',
             'card_number' => 'required',
 

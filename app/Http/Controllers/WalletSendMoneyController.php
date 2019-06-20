@@ -38,18 +38,13 @@ class WalletSendMoneyController extends Controller
          }
 
 
-         $license = License::find(1);
 
-         //Source ISO Mobile Number Format
-         $out_destination = ltrim($request->destination_mobile, "0");
-         $destination_mobile = $license->mobile_code.$out_destination;
 
-          $out_source = ltrim($request->source_mobile, "0");
-          $source_mobile = $license->mobile_code.$out_source;
+
 
          //Declarations
-         $destination = Wallet::where('mobile',$destination_mobile)->get()->first();
-         $source = Wallet::where('mobile', $source_mobile)->get()->first();
+         $destination = Wallet::where('mobile',$request->destination_mobile)->get()->first();
+          $source = Wallet::where('mobile', $request->source_mobile)->get()->first();
 
 
 

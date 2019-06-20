@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Accounts;
 use App\Devices;
+use App\Employee;
 use App\Jobs\SaveTransaction;
 use App\MerchantAccount;
 use App\PendingTxn;
@@ -51,9 +52,17 @@ class Txns extends Command
     {
 
 
-
-
         $item = PendingTxn::where('state', 0)->get();
+        $employee_id = Employee::where('imei', $item->imei)->first();
+
+        if(!isset($employee_id)){
+
+            $user_id = '';
+        }
+        else{
+
+            $user_id = $employee_id->id;
+        }
 
 
         if (!isset($item)) {
@@ -68,6 +77,7 @@ class Txns extends Command
 
         foreach ($item as $type) {
 
+            //Balance Bank X
             if ($type->transaction_type == '1') {
 
 
@@ -120,7 +130,33 @@ class Txns extends Command
                     //return $response_ = $result->getBody()->getContents();
                     $response = json_decode($result->getBody()->getContents());
 
-                    if ($response->code == '00') {
+                    if($response->code != '00'){
+
+                        Transactions::create([
+
+                            'txn_type_id'         => BALANCE_ENQUIRY_BANK_X,
+                            'tax'                 => '0.00',
+                            'revenue_fees'        => $fees_result['fees_charged'],
+                            'interchange_fees'    => '0.00',
+                            'zimswitch_fee'       => '-'.$fees_result['fees_charged'],
+                            'transaction_amount'  => '0.00',
+                            'total_debited'       => $fees_result['fees_charged'],
+                            'total_credited'      => $fees_result['fees_charged'],
+                            'batch_id'            => $response->transaction_batch_id,
+                            'switch_reference'    => $response->transaction_batch_id,
+                            'merchant_id'         => $merchant_id->merchant_id,
+                            'transaction_status'  => 0,
+                            'account_debited'     => $zimswitch_account->account_number,
+                            'pan'                 => $card_number,
+                            'description'         => 'Failed to process transaction',
+
+
+
+                        ]);
+
+
+                    }
+
 
                         //Record Txn
                         Transactions::create([
@@ -139,6 +175,7 @@ class Txns extends Command
                             'transaction_status'  => 1,
                             'account_debited'     => $zimswitch_account->account_number,
                             'pan'                 => $card_number,
+                            'employee_id'         => $user_id,
 
 
                         ]);
@@ -147,7 +184,7 @@ class Txns extends Command
 
                         PendingTxn::destroy($type->id);
 
-                    }
+
 
                 } catch (ClientException $exception) {
 
@@ -268,6 +305,7 @@ class Txns extends Command
                         'headers' => ['Authorization' => $auth, 'Content-type' => 'application/json',],
                         'json' => [
                             'bulk_trx_postings' => array(
+
                                 $debit_zimswitch_with_purchase_amnt,
                                 $debit_zimswitch_with_fees,
                                 $credit_merchant_account,
@@ -283,13 +321,37 @@ class Txns extends Command
 
                     $response = json_decode($result->getBody()->getContents());
 
-                    if ($response->code == '00') {
+                    if($response->code != '00'){
+
+
+                        Transactions::create([
+
+                            'txn_type_id'         => PURCHASE_BANK_X,
+                            'tax'                 => '',
+                            'revenue_fees'        => '0.00',
+                            'interchange_fees'    => '0.00',
+                            'zimswitch_fee'       => '-'.$fees_result['acquirer_fee'],
+                            'zimswitch_txn_amount'=> '-'.$type->amount,
+                            'transaction_amount'  => $type->amount,
+                            'total_debited'       => '',
+                            'total_credited'      => '',
+                            'batch_id'            => $response->transaction_batch_id,
+                            'switch_reference'    => $response->transaction_batch_id,
+                            'merchant_id'         => $merchant_id->merchant_id,
+                            'transaction_status'  => 1,
+                            'account_debited'     =>  $zimswitch->account_number,
+                            'pan'                 =>  $card_number,
+                            'merchant_account'    =>  '',
+                            'description'         =>  'Failed to process transaction.',
+
+                        ]);
+
+                    }
 
 
 
                         $merchant_account_amount =   $type->amount -  $fees_result['mdr'];
                         $revenue_amount =    $fees_result['mdr'] +  $fees_result['acquirer_fee'];
-
                         $total = $revenue_amount + $fees_result['acquirer_fee'];
 
                         Transactions::create([
@@ -317,7 +379,7 @@ class Txns extends Command
                         PendingTxn::destroy($type->id);
 
 
-                    }
+
 
                 } catch (ClientException $exception) {
 
@@ -376,13 +438,16 @@ class Txns extends Command
                     $fees_result = FeesCalculatorService::calculateFees(
                         $amount,
                         $cash_back_amount,
-                        Purchase_Cash_back_bank_x_debit_zimswitch,
+                        PURCHASE_CASH_BACK_BANK_X,
                         $merchant_id->merchant_id
 
                     );
 
-                    $total_funds = $amount + $cash_back_amount +
-                        $fees_result['interchange_fee'] + $fees_result['acquirer_fee'];
+                    $total_funds =  $amount +
+                                    $cash_back_amount +
+                                    $fees_result['interchange_fee'] +
+                                    $fees_result['acquirer_fee'];
+
                     // Check if client has enough funds.
 
                     $revenue = Accounts::find(2);
@@ -432,6 +497,13 @@ class Txns extends Command
                         'TrxDescription' => 'Purchase + Cash back bank x, credit merchant purchase amount',
                         'TrxAmount' => $fees_result['mdr']);
 
+                    $credit_revenue_cashback_fee = array('SerialNo' => '472100',
+                        'OurBranchID' => '001',
+                        'AccountID' => $revenue->account_number,
+                        'TrxDescriptionID' => '008',
+                        'TrxDescription' => "Purchase + Cash credit revenue with cashback fees",
+                        'TrxAmount' => $fees_result['cash_back_fee']);
+
 
 
 
@@ -452,6 +524,7 @@ class Txns extends Command
                                     $credit_revenue,
                                     $debit_merchant_mdr,
                                     $credit_revenue_mdr,
+                                    $credit_revenue_cashback_fee
                                 ),
                             ]
 
@@ -461,92 +534,74 @@ class Txns extends Command
                         //return $response_ = $result->getBody()->getContents();
                         $response = json_decode($result->getBody()->getContents());
 
-                        if ($response->code == '00') {
+                        if($response->code != '00'){
 
-                            dispatch(new SaveTransaction(
-                                    Purchase_Cash_back_bank_x_debit_zimswitch,
-                                    'COMPLETED',
-                                    $zimswitch->account_number,
-                                    $card_number,
-                                    '0.00',
-                                    $total_funds,
-                                    '0.00',
-                                    $response->transaction_batch_id,
-                                    $type->imei)
-                            );
+                            Transactions::create([
 
-                            dispatch(new SaveTransaction(
-                                    Purchase_Cash_back_bank_x_credit_merchant_purchase_amount,
-                                    'COMPLETED',
-                                    $merchant_account->account_number,
-                                    $card_number,
-                                    $amount,
-                                    '0.00',
-                                    '0.00',
-                                    $response->transaction_batch_id,
-                                    $type->imei)
-                            );
-
-
-                            dispatch(new SaveTransaction(
-                                    Purchase_Cash_back_bank_x_credit_merchant_cash_amount,
-                                    'COMPLETED',
-                                    $merchant_account->account_number,
-                                    $card_number,
-                                    $cash_back_amount,
-                                    '0.00',
-                                    '0.00',
-                                    $response->transaction_batch_id,
-                                    $type->imei)
-                            );
-
-
-                            dispatch(new SaveTransaction(
-                                    Purchase_Cash_back_bank_x_credit_revenue_account_with_fees,
-                                    'COMPLETED',
-                                    $merchant_account->account_number,
-                                    $card_number,
-                                    $fees_result['interchange_fee'] + $fees_result['acquirer_fee'],
-                                    '0.00',
-                                    '0.00',
-                                    $response->transaction_batch_id,
-                                    $type->imei)
-                            );
+                                'txn_type_id'         => PURCHASE_CASH_BACK_BANK_X,
+                                'tax'                 => '0.00',
+                                'revenue_fees'        => '0.00',
+                                'interchange_fees'    => '0.00',
+                                'zimswitch_fee'       => '0.00',
+                                'transaction_amount'  => '0.00',
+                                'total_debited'       => '0.00',
+                                'total_credited'      => '0.00',
+                                'batch_id'            => '',
+                                'switch_reference'    => '',
+                                'merchant_id'         => $merchant_id->merchant_id,
+                                'transaction_status'  => 0,
+                                'account_debited'     => '',
+                                'pan'                 => $card_number,
+                                'merchant_account'    => $merchant_account_amount,
+                                'employee_id'         => $user_id,
+                                'cash_back_amount'    => $cash_back_amount,
 
 
 
-                            dispatch(new SaveTransaction(
-                                    Purchase_Cash_back_bank_x_debit_merchant_mdr_fees,
-                                    'COMPLETED',
-                                    $merchant_account->account_number,
-                                    $card_number,
-                                    '0.00',
-                                    $fees_result['mdr'],
-                                    '0.00',
-                                    $response->transaction_batch_id,
-                                    $type->imei)
-                            );
-
-
-                            dispatch(new SaveTransaction(
-                                    Purchase_Cash_back_bank_x_credit_revenue_mdr_fees,
-                                    'COMPLETED',
-                                    $merchant_account->account_number,
-                                    $card_number,
-                                    $fees_result['mdr'],
-                                    '0.00',
-                                    '0.00',
-                                    $response->transaction_batch_id,
-                                    $type->imei)
-                            );
-
-
-
-                            PendingTxn::destroy($type->id);
-
-
-
+                            ]);
                         }
+
+
+                        $revenue_amount =   $fees_result['interchange_fee'] +
+                                            $fees_result['acquirer_fee'] +
+                                            $fees_result['cash_back_fee'] +
+                                            $fees_result['mdr'];
+
+                        $merchant_total_amount =    - $fees_result['mdr'] +  $amount + $cash_back_amount ;
+
+
+                        Transactions::create([
+
+                            'txn_type_id'         => PURCHASE_CASH_BACK_BANK_X,
+                            'tax'                 => $fees_result['tax'],
+                            'revenue_fees'        => $revenue_amount,
+                            'interchange_fees'    => $fees_result['interchange_fee'],
+                            'zimswitch_fee'       => '-'.$total_funds,
+                            'transaction_amount'  => '0.00',
+                            'total_debited'       => '0.00',
+                            'total_credited'      => '0.00',
+                            'batch_id'            => $response->transaction_batch_id,
+                            'switch_reference'    => $response->transaction_batch_id,
+                            'merchant_id'         => $merchant_id->merchant_id,
+                            'transaction_status'  => 1,
+                            'account_debited'     => '',
+                            'pan'                 => $card_number,
+                            'merchant_account'    =>$merchant_total_amount,
+                            'employee_id'         => $user_id,
+                            'cash_back_amount'    => $cash_back_amount,
+
+
+
+
+                        ]);
+
+
+
+
+
+
+
+
 
                     } catch (ClientException $exception) {
 

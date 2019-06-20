@@ -98,6 +98,20 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
     $app->post('bank_to_wallet',  'WalletB2WController@bank_to_wallet');
     $app->post('wallet_to_bank',  'WalletW2BController@wallet_to_bank');
 
+
+    //e_value_management
+    $app->post('e_value_management',  'WalletEValueController@e_value_management');
+    $app->get('pending_approval',  'WalletEValueController@all_e_value_management');
+    $app->get('pending_approvals',  'WalletEValueController@all_destroy_value');
+
+    //employee management
+    $app->post('employee_register',  'EmployeeController@employee_register');
+    $app->post('employee_login',  'EmployeeController@employee_login');
+    $app->post('employee_logout',  'EmployeeController@employee_logout');
+    $app->post('change_status',  'EmployeeController@change_status');
+
+
+
 });
 
 
