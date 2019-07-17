@@ -2,23 +2,12 @@
 namespace App\Http\Controllers;
 
 
-use App\Accounts;
-use App\Batch_Transaction;
-use App\Devices;
-use App\MerchantAccount;
-use App\Reversal;
-use App\Services\BalanceEnquiryService;
-use App\Services\CardCheckerService;
-use App\Services\CheckBalanceService;
-use App\Services\FeesCalculatorService;
-use App\Services\LimitCheckerService;
+
+
 use App\Services\TokenService;
-use App\Services\ApiTokenValidity;
-use App\Services\TransactionRecorder;
-use App\Transaction;
-use App\Zipit;
+use App\Transactions;
 use GuzzleHttp\Client;
-use GuzzleHttp\Exception\ClientException;
+use GuzzleHttp\Exception\RequestException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -48,16 +37,8 @@ class ReversalController extends Controller
 
         try {
 
-            $user = new Client();
-            $res = $user->post(env('BASE_URL') . '/api/authenticate', [
-                'json' => [
-                    'username' => env('TOKEN_USERNAME'),
-                    'password' => env('TOKEN_PASSWORD'),
-                ]
-            ]);
-            $tok = $res->getBody()->getContents();
-            $bearer = json_decode($tok, true);
-            $authentication = 'Bearer ' . $bearer['id_token'];
+
+            $authentication = TokenService::getToken();
 
             $client = new Client();
             $result = $client->post(env('BASE_URL') . '/api/reversals', [
@@ -72,21 +53,50 @@ class ReversalController extends Controller
        // return $response = $result->getBody()->getContents();
         $response = json_decode($result->getBody()->getContents());
 
-        if($response->code == '00'){
+        if($response->code != '00'){
+
+            Transactions::create([
+
+                'txn_type_id'         => REVERSAL,
+                'tax'                 => '0.00',
+                'revenue_fees'        => '0.00',
+                'interchange_fees'    => '0.00',
+                'zimswitch_fee'       => '0.00',
+                'transaction_amount'  => '0.00',
+                'total_debited'       => '0.00',
+                'total_credited'      => '0.00',
+                'batch_id'            => '',
+                'switch_reference'    => '',
+                'merchant_id'         => '',
+                'transaction_status'  => 0,
+                'account_debited'     => '',
+                'pan'                 => '',
+                'description'         => 'Reversal for batch'.$request->transaction_batch_id,
 
 
-            Transaction::create([
+            ]);
+        }
 
-                'transaction_type' => '25',
-                'status' => 'COMPLETED',
-                'account' => '',
-                'pan' => '',
-                'credit' => '0.00',
-                'debit' => '0.00',
-                'description' => 'Reversal for batch'.$request->transaction_batch_id,
-                'fee' => '0.00',
-                'batch_id' => '',
-                'merchant' => '']);
+            Transactions::create([
+
+                'txn_type_id'         => REVERSAL,
+                'tax'                 => '0.00',
+                'revenue_fees'        => '0.00',
+                'interchange_fees'    => '0.00',
+                'zimswitch_fee'       => '0.00',
+                'transaction_amount'  => '0.00',
+                'total_debited'       => '0.00',
+                'total_credited'      => '0.00',
+                'batch_id'            => '',
+                'switch_reference'    => '',
+                'merchant_id'         => '',
+                'transaction_status'  => 1,
+                'account_debited'     => '',
+                'pan'                 => '',
+                'description'         => 'Reversal for batch'.$request->transaction_batch_id,
+
+
+            ]);
 
 
             return response([
@@ -96,11 +106,32 @@ class ReversalController extends Controller
 
 
             ]);
-        }
+
 
 
 
         }catch (RequestException $e) {
+
+            Transactions::create([
+
+                'txn_type_id'         => REVERSAL,
+                'tax'                 => '0.00',
+                'revenue_fees'        => '0.00',
+                'interchange_fees'    => '0.00',
+                'zimswitch_fee'       => '0.00',
+                'transaction_amount'  => '0.00',
+                'total_debited'       => '0.00',
+                'total_credited'      => '0.00',
+                'batch_id'            => '',
+                'switch_reference'    => '',
+                'merchant_id'         => '',
+                'transaction_status'  => 0,
+                'account_debited'     => '',
+                'pan'                 => '',
+                'description'         => 'Reversal for batch'.$request->transaction_batch_id,
+
+
+            ]);
 
 
             if ($e->hasResponse()) {
@@ -108,7 +139,7 @@ class ReversalController extends Controller
                 $exception = json_decode($exception);
 
                 return array('code' => '91',
-                    'error' => $exception);
+                    'description' => $exception);
 
 
             }

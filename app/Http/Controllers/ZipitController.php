@@ -2,28 +2,15 @@
 namespace App\Http\Controllers;
 
 
-use App\Accounts;
-use App\Devices;
-use App\MerchantAccount;
 use App\Services\BalanceEnquiryService;
-use App\Services\CardCheckerService;
-use App\Services\CheckBalanceService;
 use App\Services\FeesCalculatorService;
-use App\Services\LimitCheckerService;
 use App\Services\TokenService;
-use App\Services\ApiTokenValidity;
-use App\Services\TransactionRecorder;
 use App\Transactions;
-use App\Wallet;
-use App\WalletCOS;
-use App\WalletTransactions;
 use App\Zipit;
-use Carbon\Carbon;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ClientException;
 use GuzzleHttp\Exception\RequestException;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 
@@ -38,6 +25,7 @@ class ZipitController extends Controller
 
 
     public function send(Request $request){
+
 
         //Validations
         $validator = $this->zipit_send_validation($request->all());
@@ -54,7 +42,7 @@ class ZipitController extends Controller
 
          $account_checker = substr($request->br_account,0, 3);
 
-         if($account_checker == '263'){
+       /*  if($account_checker == '263'){
 
              $source = Wallet::where('mobile', $request->br_account)->get()->first();
 
@@ -273,31 +261,14 @@ class ZipitController extends Controller
 
          }
 
+       */
 
-
-
-
-
-        /**
-         *
-         *
-         * BR Transaction.
-         */
 
         try {
 
 
-            $account_number = $request->br_account;
-            $user = new Client();
-            $res = $user->post(env('BASE_URL') . '/api/authenticate', [
-                'json' => [
-                    'username' => env('TOKEN_USERNAME'),
-                    'password' => env('TOKEN_PASSWORD'),
-                ]
-            ]);
-            $tok = $res->getBody()->getContents();
-            $bearer = json_decode($tok, true);
-            $authentication = 'Bearer ' . $bearer['id_token'];
+
+            $authentication = TokenService::getToken();
 
             $client = new Client();
             $result = $client->post(env('BASE_URL') . '/api/accounts/balance', [
@@ -336,7 +307,7 @@ class ZipitController extends Controller
                     'switch_reference'    => '',
                     'merchant_id'         => '',
                     'transaction_status'  => 0,
-                    'account_debited'     => $account_number,
+                    'account_debited'     => $request->br_account,
                     'pan'                 => '',
                     'description'         => 'Invalid amount, error 902',
 
@@ -371,7 +342,7 @@ class ZipitController extends Controller
                     'switch_reference'    => '',
                     'merchant_id'         => '',
                     'transaction_status'  => 0,
-                    'account_debited'     => $account_number,
+                    'account_debited'     => $request->br_account,
                     'pan'                 => $request->card_number,
                     'description'         => 'Insufficient Funds',
 
@@ -388,48 +359,48 @@ class ZipitController extends Controller
 
 
 
-                $zimswitch = Accounts::find(1);
-                $revenue = Accounts::find(2);
-                $tax =  Accounts::find(3);
+                $zimswitch = ZIMSWITCH;
+                $revenue = REVENUE;
+                $tax =  TAX;
 
                 $account_debit = array('SerialNo'         => '472100',
-                    'OurBranchID'      => substr($account_number, 0, 3),
-                    'AccountID'        => $account_number,
+                    'OurBranchID'      => substr($request->br_account, 0, 3),
+                    'AccountID'        => $request->br_account,
                     'TrxDescriptionID' => '007',
                     'TrxDescription'   => 'ZIPIT SEND',
                     'TrxAmount'        => -$request->amount/100);
 
                 $account_debit_fees = array('SerialNo'         => '472100',
-                    'OurBranchID'      => substr($account_number, 0, 3),
-                    'AccountID'        => $account_number,
+                    'OurBranchID'      => substr($request->br_account, 0, 3),
+                    'AccountID'        => $request->br_account,
                     'TrxDescriptionID' => '007',
                     'TrxDescription'   => "ZIPIT Transfer Fees Debit",
                     'TrxAmount'        => '-' . $fees_result['fees_charged']);
 
                 $destination_credit_zimswitch = array('SerialNo'         => '472100',
                     'OurBranchID'      => '001',
-                    'AccountID'        => $zimswitch->account_number,
+                    'AccountID'        => $zimswitch,
                     'TrxDescriptionID' => '008',
                     'TrxDescription'   => 'ZIPIT CREDIT SUSPENSE ACCOUNT',
                     'TrxAmount'        => $request->amount/100);
 
                 $bank_revenue_credit = array('SerialNo'         => '472100',
                     'OurBranchID'      => '001',
-                    'AccountID'        => $revenue->account_number,
+                    'AccountID'        => $revenue,
                     'TrxDescriptionID' => '008',
                     'TrxDescription'   => "ZIPIT Revenue Account Credit",
                     'TrxAmount'        => $fees_result['acquirer_fee']);
 
                 $tax_credit = array('SerialNo'         => '472100',
                     'OurBranchID'      => '001',
-                    'AccountID'        => $tax->account_number,
+                    'AccountID'        => $tax,
                     'TrxDescriptionID' => '008',
                     'TrxDescription'   => "ZIPIT Tax Account Credit",
                     'TrxAmount'        => $fees_result['tax']);
 
                 $zimswitch_fees = array('SerialNo'         => '472100',
                     'OurBranchID'      => '001',
-                    'AccountID'        => $tax->account_number,
+                    'AccountID'        => $tax,
                     'TrxDescriptionID' => '008',
                     'TrxDescription'   => "ZIPIT Tax Account Credit",
                     'TrxAmount'        => $fees_result['zimswitch_fee']);
@@ -438,13 +409,13 @@ class ZipitController extends Controller
 
 
 
-                $auth = TokenService::getToken();
+
                 $client = new Client();
 
                 try {
                     $result = $client->post(env('BASE_URL') . '/api/internal-transfer', [
 
-                        'headers' => ['Authorization' => $auth, 'Content-type' => 'application/json',],
+                        'headers' => ['Authorization' => $authentication, 'Content-type' => 'application/json',],
                         'json' => [
                             'bulk_trx_postings' =>  array(
                         $account_debit,
@@ -501,7 +472,7 @@ class ZipitController extends Controller
 
                             'source_bank'           =>'GETBUCKS',
                             'destination_bank'      =>$request->destination_bank,
-                            'source'                =>$account_number,
+                            'source'                =>$request->br_account,
                             'destination'           =>$request->destination_account,
                             'amount'                => $request->amount/100,
                             'type'                  =>'ZIPIT SEND',
@@ -579,7 +550,7 @@ class ZipitController extends Controller
                     'switch_reference'    => '',
                     'merchant_id'         => '',
                     'transaction_status'  => 0,
-                    'account_debited'     => $account_number,
+                    'account_debited'     => $request->br_account,
                     'pan'                 => '',
                     'description'         => $exception->message,
 
@@ -610,7 +581,7 @@ class ZipitController extends Controller
                     'switch_reference'    => '',
                     'merchant_id'         =>'',
                     'transaction_status'  => 0,
-                    'account_debited'     => $account_number,
+                    'account_debited'     => $request->br_account,
                     'pan'                 => '',
                     'description'         => 'Failed to process transactions,error 01'.$e->getMessage(),
 
@@ -631,22 +602,17 @@ class ZipitController extends Controller
 
     }
 
-
-
     public function receive(Request $request){
 
 
 
-        $account_checker = substr($request->br_account,0, 3);
+      //  $account_checker = substr($request->br_account,0, 3);
 
-
+        /*
         if($account_checker == '263'){
 
             $destination = Wallet::where('mobile', $request->br_account)->get()->first();
             $zimswitch_mobile = Wallet::where('mobile', '263700000004')->get()->first();
-
-
-
 
 
             if(!isset($destination)){
@@ -839,16 +805,17 @@ class ZipitController extends Controller
 
 
         }
+        */
 
 
         try {
 
-            $account_number = $request->br_account;
 
-            $zimswitch = Accounts::find(1);
+
+            $zimswitch = ZIMSWITCH;
             $destination_account_credit = array('SerialNo'         => '472100',
-                'OurBranchID'      => substr($account_number, 0, 3),
-                'AccountID'        => $account_number,
+                'OurBranchID'      => substr($request->br_account, 0, 3),
+                'AccountID'        => $request->br_account,
                 'TrxDescriptionID' => '007',
                 'TrxDescription'   => 'ZIPIT  CREDIT RECEIVE',
                 'TrxAmount'        => $request->amount);
@@ -856,18 +823,15 @@ class ZipitController extends Controller
 
             $zimswitch_debit = array('SerialNo'         => '472100',
                 'OurBranchID'      => '001',
-                'AccountID'        => $zimswitch->account_number,
+                'AccountID'        => $zimswitch,
                 'TrxDescriptionID' => '008',
                 'TrxDescription'   => 'ZIPIT CREDIT SUSPENSE ACCOUNT',
-                'TrxAmount'        => -$request->amount);
+                'TrxAmount'        => - $request->amount);
 
 
 
             $auth = TokenService::getToken();
             $client = new Client();
-
-
-
 
 
                 try {
@@ -926,10 +890,10 @@ class ZipitController extends Controller
                             'switch_reference'    => $response->transaction_batch_id,
                             'merchant_id'         => '',
                             'transaction_status'  => 1,
-                            'account_debited'     => $zimswitch->account_number,
+                            'account_debited'     => $zimswitch,
                             'pan'                 => '',
                             'merchant_account'    => '',
-                            'account_credited'    => $zimswitch->account_number,
+                            'account_credited'    => $request->br_account,
 
 
 
@@ -979,7 +943,7 @@ class ZipitController extends Controller
                         'switch_reference'    => '',
                         'merchant_id'         => '',
                         'transaction_status'  => 0,
-                        'account_debited'     => $request->account_number,
+                        'account_debited'     => '',
                         'pan'                 => '',
                         'description'         => 'Failed to process transactions. BR. Error',
 
@@ -1018,7 +982,7 @@ class ZipitController extends Controller
                     'switch_reference'    => '',
                     'merchant_id'         => '',
                     'transaction_status'  => 0,
-                    'account_debited'     => $account_number,
+                    'account_debited'     => $request->br_account,
                     'pan'                 => '',
                     'description'         => $exception->message,
 
@@ -1049,7 +1013,7 @@ class ZipitController extends Controller
                     'switch_reference'    => '',
                     'merchant_id'         =>'',
                     'transaction_status'  => 0,
-                    'account_debited'     => $account_number,
+                    'account_debited'     => $request->br_account,
                     'pan'                 => '',
                     'description'         => 'Failed to process transactions,error 01'.$e->getMessage(),
 

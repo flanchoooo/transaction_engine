@@ -83,7 +83,6 @@ class Txns extends Command
 
                 $merchant_id = Devices::where('imei', $type->imei)->first();
 
-
                 $card_number = str_limit($type->card_number, 16, '');
                 //Balance Enquiry off Us Debit Fees
                 $fees_result = FeesCalculatorService::calculateFees(

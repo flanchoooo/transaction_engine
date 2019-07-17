@@ -21,6 +21,6 @@ class Batch_Transaction extends Model implements Authenticatable
 
     protected $hidden = ['created_at','updated_at','created_by','updated_by','transaction_type_id',
         'amount','status','fee','card','pan','batch_id','id','day','merchant','channel'];
-    protected $table = 'transaction';
+    protected $table = 'transactions';
 
 }

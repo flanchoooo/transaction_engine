@@ -46,11 +46,18 @@ class BalanceController extends Controller
             return response()->json(['code' => '99', 'description' => $validator->errors()]);
         }
 
+       /*
+        * Declarations
+        */
         $currency = License::find(1);
+        $card_number = substr($request->card_number, 0, 16);
         $branch_id = substr($request->account_number, 0, 3);
-        $card_details = LuhnCards::where('track_1', $request->card_number)->get()->first();
         $merchant_id = Devices::where('imei', $request->imei)->first();
         $employee_id = Employee::where('imei', $request->imei)->first();
+
+       /*
+        * Check employees if the parameter is set.
+        */
 
         if(!isset($merchant_id)){
 
@@ -66,8 +73,8 @@ class BalanceController extends Controller
             $user_id = $employee_id->id;
         }
 
-
-
+        //Wallet Code
+        /*
         if(isset($card_details->wallet_id)){
 
             //Declaration
@@ -257,23 +264,18 @@ class BalanceController extends Controller
 
         }
 
+        */
 
+        /*
+         * Peform Balance enquiry & return valid responses.
+         */
 
         if (isset($request->imei)) {
 
             try {
 
-                $user = new Client();
-                $res = $user->post(env('BASE_URL') . '/api/authenticate', [
-                    'json' => [
-                        'username' => env('TOKEN_USERNAME'),
-                        'password' => env('TOKEN_PASSWORD'),
-                    ],
-                ]);
-                $tok = $res->getBody()->getContents();
-                $bearer = json_decode($tok, true);
-                $authentication = 'Bearer ' . $bearer['id_token'];
 
+                $authentication = TokenService::getToken();
                 $client = new Client();
                 $result = $client->post(env('BASE_URL') . '/api/accounts/balance', [
 
@@ -303,7 +305,8 @@ class BalanceController extends Controller
                         'merchant_id'         => $merchant_id->merchant_id,
                         'transaction_status'  => 0,
                         'account_debited'     => $request->account_number,
-                        'pan'                 => $request->card_number,
+                        'pan'                 => $card_number,
+                        'description'         => 'Insufficient funds',
 
 
                     ]);
@@ -344,14 +347,13 @@ class BalanceController extends Controller
                                                  'TrxAmount'        => $fees_result['acquirer_fee']);
 
 
-                    $auth = TokenService::getToken();
-                    $client = new Client();
 
+                    $client = new Client();
 
                     try {
                         $result = $client->post(env('BASE_URL') . '/api/internal-transfer', [
 
-                            'headers' => ['Authorization' => $auth, 'Content-type' => 'application/json',],
+                            'headers' => ['Authorization' => $authentication, 'Content-type' => 'application/json',],
                             'json'    => [
                                 'bulk_trx_postings' => array(
                                     $account_debit,
@@ -381,7 +383,7 @@ class BalanceController extends Controller
                                'merchant_id'         => $merchant_id->merchant_id,
                                'transaction_status'  => 0,
                                'account_debited'     => $request->account_number,
-                               'pan'                 => $request->card_number,
+                               'pan'                 => $card_number,
 
 
                            ]);
@@ -393,11 +395,6 @@ class BalanceController extends Controller
                            ]);
 
                        }
-
-
-
-
-                          //Record Txn
 
                         Transactions::create([
 
@@ -414,7 +411,7 @@ class BalanceController extends Controller
                               'merchant_id'         => $merchant_id->merchant_id,
                               'transaction_status'  => 1,
                               'account_debited'     => $request->account_number,
-                              'pan'                 => $request->card_number,
+                              'pan'                 => $card_number,
                               'employee_id'         => $user_id,
 
 
@@ -451,7 +448,7 @@ class BalanceController extends Controller
                             'merchant_id'         => $merchant_id->merchant_id,
                             'transaction_status'  => 0,
                             'account_debited'     => $request->account_number,
-                            'pan'                 => $request->card_number,
+                            'pan'                 => $card_number,
                             'description'          => 'Failed to process transaction,error 91'.$exception,
 
 
@@ -493,7 +490,7 @@ class BalanceController extends Controller
                         'merchant_id'         => $merchant_id->merchant_id,
                         'transaction_status'  => 0,
                         'account_debited'     => $request->account_number,
-                        'pan'                 => $request->card_number,
+                        'pan'                 => $card_number,
                         'description'          => $exception->message,
 
 
@@ -526,7 +523,7 @@ class BalanceController extends Controller
                         'merchant_id'         => $merchant_id->merchant_id,
                         'transaction_status'  => 0,
                         'account_debited'     => $request->account_number,
-                        'pan'                 => $request->card_number,
+                        'pan'                 => $card_number,
                         'description'          => 'Failed to process transaction'.$e->getMessage(),
 
 
@@ -558,13 +555,14 @@ class BalanceController extends Controller
         }
 
 
-        $currency = License::find(1);
-       // $card_number = str_limit($request->card_number, 16, '');
+
+        //$card_number = str_limit($request->card_number, 16, '');
+        //$card_details = LuhnCards::where('track_1', $request->card_number)->get()->first();
         $branch_id = substr($request->account_number, 0, 3);
-        $card_details = LuhnCards::where('track_1', $request->card_number)->get()->first();
+        $currency = License::find(1);
 
 
-
+        /*
         if(isset($card_details->wallet_id)){
 
             //Declaration
@@ -757,27 +755,19 @@ class BalanceController extends Controller
                 'available_balance' =>  $source->balance,
                 'ledger_balance'    =>  $source->balance,
                 'batch_id'          => "$reference",
+                'description'       => "SUCCESS",
 
             ]);
 
 
         }
-
+        */
 
 
         try {
 
-            $user = new Client();
-            $res = $user->post(env('BASE_URL') . '/api/authenticate', [
-                'json' => [
-                    'username' => env('TOKEN_USERNAME'),
-                    'password' => env('TOKEN_PASSWORD'),
-                ],
-            ]);
-            $tok = $res->getBody()->getContents();
-            $bearer = json_decode($tok, true);
-            $authentication = 'Bearer ' . $bearer['id_token'];
 
+            $authentication = TokenService::getToken();
             $client = new Client();
             $result = $client->post(env('BASE_URL') . '/api/accounts/balance', [
 
@@ -819,13 +809,12 @@ class BalanceController extends Controller
                                           'TrxAmount'        => $fees_result['zimswitch_fee']);
 
 
-                $auth = TokenService::getToken();
-                $client = new Client();
 
+                $client = new Client();
                 try {
                     $result = $client->post(env('BASE_URL') . '/api/internal-transfer', [
 
-                        'headers' => ['Authorization' => $auth, 'Content-type' => 'application/json',],
+                        'headers' => ['Authorization' => $authentication, 'Content-type' => 'application/json',],
                         'json'    => [
                             'bulk_trx_postings' => array(
                                 $account_debit,
@@ -889,7 +878,7 @@ class BalanceController extends Controller
                             'transaction_status'  => 0,
                             'account_debited'     => $request->account_number,
                             'pan'                 => $request->card_number,
-                            'description'         => 'BALANCE ENQUIRY OFF US',
+                            'description'         => 'Insufficient Funds',
 
 
                         ]);
@@ -972,13 +961,13 @@ class BalanceController extends Controller
                                           'TrxAmount'        => $fees_result['zimswitch_fee']);
 
 
-                $auth = TokenService::getToken();
+
                 $client = new Client();
 
                 try {
                     $result = $client->post(env('BASE_URL') . '/api/internal-transfer', [
 
-                        'headers' => ['Authorization' => $auth, 'Content-type' => 'application/json',],
+                        'headers' => ['Authorization' => $authentication, 'Content-type' => 'application/json',],
                         'json'    => [
                             'bulk_trx_postings' => array(
                                 $account_debit,
@@ -1018,9 +1007,6 @@ class BalanceController extends Controller
 
                    }
 
-
-
-
                         Transactions::create([
 
                             'txn_type_id'         => BALANCE_ENQUIRY_OFF_US,
@@ -1047,10 +1033,12 @@ class BalanceController extends Controller
                         return response([
 
                             'code'              => '000',
+                            'fees_charged'      => $fees_result['fees_charged'],
                             'currency'          => $currency->currency,
-                            'available_balance' =>  round($balance_response->available_balance,2,PHP_ROUND_HALF_EVEN),
-                            'ledger_balance'    =>  round($balance_response->ledger_balance,2,PHP_ROUND_HALF_EVEN),
+                            'available_balance' => round($balance_response->available_balance,2,PHP_ROUND_HALF_EVEN),
+                            'ledger_balance'    => round($balance_response->ledger_balance,2,PHP_ROUND_HALF_EVEN),
                             'batch_id'          => "$response->transaction_batch_id",
+                            'description'       => "SUCCESS",
 
                         ]);
 

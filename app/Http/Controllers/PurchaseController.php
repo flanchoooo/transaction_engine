@@ -44,11 +44,14 @@ class PurchaseController extends Controller
             return response()->json(['code' => '99', 'description' => $validator->errors()]);
         }
 
-        $card_details = LuhnCards::where('track_1', $request->card_number)->get()->first();
+        //$card_details = LuhnCards::where('track_1', $request->card_number)->get()->first();
         $employee_id = Employee::where('imei', $request->imei)->get()->first();
         $merchant_id = Devices::where('imei', $request->imei)->first();
         $merchant_account = MerchantAccount::where('merchant_id',$merchant_id->merchant_id)->first();
 
+        /*
+         * Employee Management
+         */
 
         if(!isset($merchant_id)){
 
@@ -74,6 +77,11 @@ class PurchaseController extends Controller
             $user_id = $employee_id->id;
         }
 
+        /*
+         * Wallet Code
+         */
+
+        /*
         if(isset($card_details->wallet_id)){
 
             //Declaration
@@ -281,9 +289,7 @@ class PurchaseController extends Controller
 
 
         }
-
-
-
+        */
 
 
         //On Us Purchase Txn Getbucks Card on Getbucks POS
@@ -293,16 +299,8 @@ class PurchaseController extends Controller
             try {
 
 
-                $user = new Client();
-                $res = $user->post(env('BASE_URL') . '/api/authenticate', [
-                    'json' => [
-                        'username' => env('TOKEN_USERNAME'),
-                        'password' => env('TOKEN_PASSWORD'),
-                    ]
-                ]);
-                $tok = $res->getBody()->getContents();
-                $bearer = json_decode($tok, true);
-                $authentication = 'Bearer ' . $bearer['id_token'];
+
+                $authentication = TokenService::getToken();
 
                 $client = new Client();
                 $result = $client->post(env('BASE_URL') . '/api/accounts/balance', [
@@ -314,8 +312,6 @@ class PurchaseController extends Controller
                 ]);
 
                 $balance_response = json_decode($result->getBody()->getContents());
-
-
 
                 //Balance Enquiry On Us Debit Fees
                   $fees_charged = FeesCalculatorService::calculateFees(
@@ -394,8 +390,10 @@ class PurchaseController extends Controller
                 }
 
 
-                    $revenue = Accounts::find(2);
-                    $tax = Accounts::find(3);
+
+
+                    $revenue = REVENUE;
+                    $tax = TAX;
 
 
                     $credit_merchant_account = array('SerialNo' => '472100',
@@ -424,14 +422,14 @@ class PurchaseController extends Controller
 
                     $credit_revenue_fees = array('SerialNo' => '472100',
                         'OurBranchID' => '001',
-                        'AccountID' => $revenue->account_number,
+                        'AccountID' => $revenue,
                         'TrxDescriptionID' => '008',
                         'TrxDescription' => "Purchase on us  credit revenue account with fees",
                         'TrxAmount' => $fees_charged['acquirer_fee']);
 
                     $tax_account_credit = array('SerialNo' => '472100',
                         'OurBranchID' => '001',
-                        'AccountID' => $tax->account_number,
+                        'AccountID' => $tax,
                         'TrxDescriptionID' => '008',
                         'TrxDescription' => "Purchase on us tax account credit",
                         'TrxAmount' => "". $fees_charged['tax']);
@@ -445,20 +443,20 @@ class PurchaseController extends Controller
 
                     $credit_revenue_mdr = array('SerialNo' => '472100',
                         'OurBranchID' => '001',
-                        'AccountID' => $revenue->account_number,
+                        'AccountID' => $revenue,
                         'TrxDescriptionID' => '008',
                         'TrxDescription' => "Purchase on us,credit revenue with fees",
                         'TrxAmount' => $fees_charged['mdr']);
 
 
 
-                    $auth = TokenService::getToken();
+
                     $client = new Client();
 
                     try {
                         $result = $client->post(env('BASE_URL') . '/api/internal-transfer', [
 
-                            'headers' => ['Authorization' => $auth, 'Content-type' => 'application/json',],
+                            'headers' => ['Authorization' => $authentication, 'Content-type' => 'application/json',],
                             'json' => [
                                 'bulk_trx_postings' => array(
 
@@ -542,9 +540,9 @@ class PurchaseController extends Controller
 
                             return response([
 
-                                'code' => '000',
-                                'batch_id' => (string)$response->transaction_batch_id,
-                                'description' => 'Success'
+                                'code'          => '000',
+                                'batch_id'      => (string)$response->transaction_batch_id,
+                                'description'   => 'Success'
 
 
                             ]);
@@ -666,15 +664,11 @@ class PurchaseController extends Controller
 
         }
 
-
-
-
     }
 
 
     public function purchase_off_us(Request $request)
     {
-
         //return  $transaction_type = TransactionType::find(65);
         $validator = $this->purchase_off_us_validation($request->all());
         if ($validator->fails()) {
@@ -683,11 +677,9 @@ class PurchaseController extends Controller
 
 
         $branch_id = substr($request->account_number, 0, 3);
+        //$card_details = LuhnCards::where('track_1', $request->card_number)->get()->first();
 
-
-        $card_details = LuhnCards::where('track_1', $request->card_number)->get()->first();
-
-
+        /*
         if(isset($card_details->wallet_id)){
 
             //Declaration
@@ -902,7 +894,7 @@ class PurchaseController extends Controller
 
 
         }
-
+        */
 
         try {
 
@@ -948,16 +940,8 @@ class PurchaseController extends Controller
             }
 
 
-            $user = new Client();
-            $res = $user->post(env('BASE_URL') . '/api/authenticate', [
-                'json' => [
-                    'username' => env('TOKEN_USERNAME'),
-                    'password' => env('TOKEN_PASSWORD'),
-                ]
-            ]);
-            $tok = $res->getBody()->getContents();
-            $bearer = json_decode($tok, true);
-            $authentication = 'Bearer ' . $bearer['id_token'];
+
+            $authentication = TokenService::getToken();
 
             $client = new Client();
             $result = $client->post(env('BASE_URL') . '/api/accounts/balance', [
@@ -968,12 +952,8 @@ class PurchaseController extends Controller
                 ]
             ]);
 
-            //$balance_response = $result->getBody()->getContents();
 
             $balance_response = json_decode($result->getBody()->getContents());
-
-
-
             $total_funds = $fees_charged['fees_charged'] + ($request->amount /100);
 
 
@@ -1009,9 +989,9 @@ class PurchaseController extends Controller
             }
 
 
-                $zimswitch = Accounts::find(1);
-                $revenue = Accounts::find(2);
-                $tax = Accounts::find(3);
+                $zimswitch = ZIMSWITCH;
+                $revenue = REVENUE;
+                $tax = TAX;
 
                 $credit_zimswitch_account = $fees_charged['zimswitch_fee']
                                           + $fees_charged['acquirer_fee']
@@ -1035,7 +1015,7 @@ class PurchaseController extends Controller
 
                 $credit_tax = array('SerialNo' => '472100',
                     'OurBranchID' => $branch_id,
-                    'AccountID' => $tax->account_number,
+                    'AccountID' => $tax,
                     'TrxDescriptionID' => '008',
                     'TrxDescription' => 'Purchase off us, credit tax',
                     'TrxAmount' => $fees_charged['tax']);
@@ -1043,14 +1023,14 @@ class PurchaseController extends Controller
 
                  $credit_zimswitch = array('SerialNo' => '472100',
                     'OurBranchID' => $branch_id,
-                    'AccountID' => $zimswitch->account_number,
+                    'AccountID' => $zimswitch,
                     'TrxDescriptionID' => '008',
                     'TrxDescription' => 'Purchase off us, credit Zimswitch',
                     'TrxAmount' =>  $credit_zimswitch_account);
 
                 $debit_zimswitch_inter_fee = array('SerialNo' => '472100',
                     'OurBranchID' => $branch_id,
-                    'AccountID' => $zimswitch->account_number,
+                    'AccountID' => $zimswitch,
                     'TrxDescriptionID' => '007',
                     'TrxDescription' => 'Purchase off us, debit inter change fee',
                     'TrxAmount' => '-' . $fees_charged['interchange_fee']);
@@ -1058,7 +1038,7 @@ class PurchaseController extends Controller
 
                 $credit_revenue = array('SerialNo' => '472100',
                     'OurBranchID' => $branch_id,
-                    'AccountID' => $revenue->account_number,
+                    'AccountID' => $revenue,
                     'TrxDescriptionID' => '008',
                     'TrxDescription' => 'Purchase off us, credit revenue',
                     'TrxAmount' => $fees_charged['interchange_fee']);
@@ -1066,13 +1046,12 @@ class PurchaseController extends Controller
 
 
 
-                $auth = TokenService::getToken();
                 $client = new Client();
 
                 try {
                     $result = $client->post(env('BASE_URL') . '/api/internal-transfer', [
 
-                        'headers' => ['Authorization' => $auth, 'Content-type' => 'application/json',],
+                        'headers' => ['Authorization' => $authentication, 'Content-type' => 'application/json',],
                         'json' => [
                             'bulk_trx_postings' => array(
                                 $debit_client_purchase_amount,
@@ -1152,9 +1131,10 @@ class PurchaseController extends Controller
 
                         return response([
 
-                            'code' => '000',
-                            'batch_id' => (string)$response->transaction_batch_id,
-                            'description' => 'Success'
+                            'code'              => '000',
+                            'fees_charged'      => $fees_charged['fees_charged'],
+                            'batch_id'          => (string)$response->transaction_batch_id,
+                            'description'       => 'Success'
 
 
                         ]);
@@ -1291,13 +1271,14 @@ class PurchaseController extends Controller
         }
 
 
-
+            /*
+             *
+             *Declarations
+             */
 
             $card_number = str_limit($request->card_number,16,'');
             //$amount =  $request->amount / 100;
             $cash_back_amount =  $request->cashback_amount / 100;
-
-
             $merchant_id = Devices::where('imei', $request->imei)->first();
             $merchant_account = MerchantAccount::where('merchant_id',$merchant_id->merchant_id)->first();
             $merchant_account->account_number;
@@ -1314,26 +1295,16 @@ class PurchaseController extends Controller
 
             }
 
-        if(isset($employee_id)){
+             if(isset($employee_id)){
 
             $user_id = $employee_id->id;
 
-        }
-
+             }
 
             try {
 
 
-                $user = new Client();
-                $res = $user->post(env('BASE_URL') . '/api/authenticate', [
-                    'json' => [
-                        'username' => env('TOKEN_USERNAME'),
-                        'password' => env('TOKEN_PASSWORD'),
-                    ]
-                ]);
-                $tok = $res->getBody()->getContents();
-                $bearer = json_decode($tok, true);
-                $authentication = 'Bearer ' . $bearer['id_token'];
+                $authentication = TokenService::getToken();
 
                 $client = new Client();
                 $result = $client->post(env('BASE_URL') . '/api/accounts/balance', [
@@ -1422,8 +1393,8 @@ class PurchaseController extends Controller
                 }
 
 
-                    $revenue = Accounts::find(2);
-                    $tax = Accounts::find(3);
+                    $revenue = REVENUE;
+                    $tax = TAX;
 
 
                     $credit_merchant_account = array('SerialNo' => '472100',
@@ -1466,14 +1437,14 @@ class PurchaseController extends Controller
 
                     $credit_revenue_fees = array('SerialNo' => '472100',
                         'OurBranchID' => '001',
-                        'AccountID' => $revenue->account_number,
+                        'AccountID' => $revenue,
                         'TrxDescriptionID' => '008',
                         'TrxDescription' => "Purchase + Cash on us credit revenue account with fees",
                         'TrxAmount' => $fees_result['acquirer_fee']);
 
                     $tax_account_credit = array('SerialNo' => '472100',
                         'OurBranchID' => '001',
-                        'AccountID' => $tax->account_number,
+                        'AccountID' => $tax,
                         'TrxDescriptionID' => '008',
                         'TrxDescription' => "Purchase + Cash  on us tax account credit",
                         'TrxAmount' => "". $fees_result['tax']);
@@ -1487,7 +1458,7 @@ class PurchaseController extends Controller
 
                     $credit_revenue_mdr = array('SerialNo' => '472100',
                         'OurBranchID' => '001',
-                        'AccountID' => $revenue->account_number,
+                        'AccountID' => $revenue,
                         'TrxDescriptionID' => '008',
                         'TrxDescription' => "Purchase + Cash  on us tax account credit",
                         'TrxAmount' => $fees_result['mdr']);
@@ -1496,7 +1467,7 @@ class PurchaseController extends Controller
 
                     $credit_revenue_cashback_fee = array('SerialNo' => '472100',
                         'OurBranchID' => '001',
-                        'AccountID' => $revenue->account_number,
+                        'AccountID' => $revenue,
                         'TrxDescriptionID' => '008',
                         'TrxDescription' => "Purchase + Cash credit revenue with cashback fees",
                         'TrxAmount' => $fees_result['cash_back_fee']);
@@ -1506,13 +1477,13 @@ class PurchaseController extends Controller
 
 
 
-                    $auth = TokenService::getToken();
+
                     $client = new Client();
 
                     try {
                         $result = $client->post(env('BASE_URL') . '/api/internal-transfer', [
 
-                            'headers' => ['Authorization' => $auth, 'Content-type' => 'application/json',],
+                            'headers' => ['Authorization' => $authentication, 'Content-type' => 'application/json',],
                             'json' => [
                                 'bulk_trx_postings' => array(
 
@@ -1746,16 +1717,8 @@ class PurchaseController extends Controller
         try {
 
 
-            $user = new Client();
-            $res = $user->post(env('BASE_URL') . '/api/authenticate', [
-                'json' => [
-                    'username' => env('TOKEN_USERNAME'),
-                    'password' => env('TOKEN_PASSWORD'),
-                ]
-            ]);
-            $tok = $res->getBody()->getContents();
-            $bearer = json_decode($tok, true);
-            $authentication = 'Bearer ' . $bearer['id_token'];
+
+            $authentication = TokenService::getToken();
 
             $client = new Client();
             $result = $client->post(env('BASE_URL') . '/api/accounts/balance', [
@@ -1846,9 +1809,9 @@ class PurchaseController extends Controller
 
             }
 
-                $revenue = Accounts::find(2);
-                $tax = Accounts::find(3);
-                $zimswitch = Accounts::find(1);
+                $revenue = REVENUE;
+                $tax = TAX;
+                $zimswitch =ZIMSWITCH;
 
 
                 $zimswitch_amount = $request->amount/100 +
@@ -1883,21 +1846,21 @@ class PurchaseController extends Controller
 
                 $credit_tax = array('SerialNo' => '472100',
                     'OurBranchID' => $branch_id,
-                    'AccountID' => $tax->account_number,
+                    'AccountID' => $tax,
                     'TrxDescriptionID' => '008',
                     'TrxDescription' => 'Purchase + Cash off us,credit tax',
                     'TrxAmount' => $fees_charged['tax']);
 
                 $credit_zimswitch = array('SerialNo' => '472100',
                     'OurBranchID' => $branch_id,
-                    'AccountID' => $zimswitch->account_number,
+                    'AccountID' => $zimswitch,
                     'TrxDescriptionID' => '008',
                     'TrxDescription' => 'Purchase + Cash off us,credit zimswitch ',
                     'TrxAmount' => $zimswitch_amount);
 
                 $debit_zimswitch_interchange = array('SerialNo' => '472100',
                     'OurBranchID' => $branch_id,
-                    'AccountID' => $zimswitch->account_number,
+                    'AccountID' => $zimswitch,
                     'TrxDescriptionID' => '007',
                     'TrxDescription' => 'Purchase + Cash off us,debit zimswitch inter change fee',
                     'TrxAmount' => '-'.$fees_charged['interchange_fee']);
@@ -1905,7 +1868,7 @@ class PurchaseController extends Controller
 
                 $credit_revenue = array('SerialNo' => '472100',
                     'OurBranchID' => $branch_id,
-                    'AccountID' => $revenue->account_number,
+                    'AccountID' => $revenue,
                     'TrxDescriptionID' => '008',
                     'TrxDescription' => 'Purchase + Cash off us,credit revenue',
                     'TrxAmount' => $fees_charged['interchange_fee']);
@@ -2000,6 +1963,7 @@ class PurchaseController extends Controller
                         return response([
 
                             'code' => '000',
+                            'fees_charged' => $fees_charged['fees_charged'],
                             'batch_id' => (string)$response->transaction_batch_id,
                             'description' => 'Success'
 

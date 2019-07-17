@@ -4,9 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Batch;
 use App\Batch_Transaction;
+use App\Devices;
 use App\License;
+use App\Merchant;
 use App\Services\BalanceEnquiryService;
 use App\Transaction;
+use App\Transactions;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -36,7 +39,7 @@ class BatchCutOffController extends Controller
             ]);
         };
 
-
+        $merchant =  Devices::where('imei',$request->imei)->first();
         $batch = Batch::where('imei', $request->imei)->get()->last();
         $start = Carbon::parse($batch->created_at);
         $end = Carbon::now();
@@ -59,93 +62,137 @@ class BatchCutOffController extends Controller
             ->whereBetween('created_at', [$start, $end])->get();
 
         */
+       // return  Batch_Transaction::all();
 
-
-        //purchase amount
-        $purchase_cash_back_sum = Batch_Transaction::where('merchant', $request->imei)
-            ->where('transaction_type', '14')
+        //Purchase Amount on us total
+        $purchase_on_us_sum = Batch_Transaction::where('merchant_id', $merchant->merchant_id)
+            ->where('txn_type_id', '4')
             ->whereBetween('created_at', [$start, $end])
-            ->sum('credit');
+            ->sum('transaction_amount');
 
-
-        $balance = Batch_Transaction::where('merchant', $request->imei)
-            ->where('transaction_type', '1')
+         $purchase_on_off_us_sum = Batch_Transaction::where('merchant_id', $merchant->merchant_id)
+            ->where('txn_type_id', '7')
             ->whereBetween('created_at', [$start, $end])
-            ->sum('credit');
+            ->sum('transaction_amount');
 
-
-        //Cashback amount
-        $cashback_amount = Batch_Transaction::where('merchant', $request->imei)
-            ->where('transaction_type', '21')
-            ->whereBetween('created_at', [$start, $end])
-            ->sum('credit');
-
-
-        //Cashback amount
-        $purchase = Batch_Transaction::where('merchant', $request->imei)
-            ->where('transaction_type', '6')
-            ->whereBetween('created_at', [$start, $end])
-            ->sum('credit');
-
-
-        $purchase_cash_back_sum_count = Batch_Transaction::where('merchant', $request->imei)
-            ->where('transaction_type', '14')
-            ->whereBetween('created_at', [$start, $end])
-            ->count();
-//
-        $balance_count = Batch_Transaction::where('merchant', $request->imei)
-            ->where('transaction_type', '1')
-            ->whereBetween('created_at', [$start, $end])
+         $purchase_on_us_count = Batch_Transaction::where('merchant_id', $merchant->merchant_id)
+            ->where('txn_type_id', '4')
+            ->whereBetween('created_at', [$start, $end])->get()
             ->count();
 
-        $cashback_amount_count = Batch_Transaction::where('merchant', $request->imei)
-            ->where('transaction_type', '21')
+         $purchase_on_off_count = Batch_Transaction::where('merchant_id', $merchant->merchant_id)
+            ->where('txn_type_id', '7')
             ->whereBetween('created_at', [$start, $end])->get()
             ->count();
 
 
-        //Cashback amount
-        $purchase_count = Batch_Transaction::where('merchant', $request->imei)
-            ->where('transaction_type', '6')
+        $balance_on_us_count= Batch_Transaction::where('merchant_id', $merchant->merchant_id)
+            ->where('txn_type_id', '1')
+            ->whereBetween('created_at', [$start, $end])
+            ->count();
+
+        $balance_off_us_count= Batch_Transaction::where('merchant_id', $merchant->merchant_id)
+            ->where('txn_type_id', '3')
             ->whereBetween('created_at', [$start, $end])
             ->count();
 
 
-        $total_credits = $purchase_cash_back_sum + $balance + $cashback_amount + $purchase;
-        $total_count = $purchase_cash_back_sum_count + $balance_count + $cashback_amount_count + $purchase_count;
+         $purchase_cb_on_us_txn_amount = Batch_Transaction::where('merchant_id', $merchant->merchant_id)
+            ->where('txn_type_id', '8')
+            ->whereBetween('created_at', [$start, $end])
+            ->sum('transaction_amount');
+
+         $purchase_cb_on_us_cb_amount = Batch_Transaction::where('merchant_id', $merchant->merchant_id)
+            ->where('txn_type_id', '8')
+            ->whereBetween('created_at', [$start, $end])
+            ->sum('cash_back_amount');
 
 
-        Batch::create([
+        $purchase_cb_on_us_cb_count = Batch_Transaction::where('merchant_id', $merchant->merchant_id)
+            ->where('txn_type_id', '8')
+            ->whereBetween('created_at', [$start, $end])
+            ->count();
 
-            'imei' => $request->imei,
+        $purchase_cb_on_off_txn_amount = Batch_Transaction::where('merchant_id', $merchant->merchant_id)
+            ->where('txn_type_id', '10')
+            ->whereBetween('created_at', [$start, $end])
+            ->sum('transaction_amount');
+
+        $purchase_cb_on_off_cb_amount = Batch_Transaction::where('merchant_id', $merchant->merchant_id)
+            ->where('txn_type_id', '10')
+            ->whereBetween('created_at', [$start, $end])
+            ->sum('cash_back_amount');
+
+
+        $purchase_cb__us_txn_count = Batch_Transaction::where('merchant_id', $merchant->merchant_id)
+            ->where('txn_type_id', '10')
+            ->whereBetween('created_at', [$start, $end])
+            ->count();
+
+         $purchase_cb_on_us_txn_count = Batch_Transaction::where('merchant_id', $merchant->merchant_id)
+            ->where('txn_type_id', '10')
+            ->whereBetween('created_at', [$start, $end])
+            ->count();
+
+
+
+
+
+           $total_credits = $purchase_on_us_sum +
+                            $purchase_on_off_us_sum +
+                            $purchase_cb_on_off_txn_amount +
+                            $purchase_cb_on_off_cb_amount +
+                            $purchase_cb_on_us_txn_amount +
+                            $purchase_cb_on_us_cb_amount;
+
+            $total_count =   $purchase_on_us_count +
+                            $purchase_on_off_count +
+                            $balance_on_us_count +
+                            $balance_off_us_count +
+                            $purchase_cb_on_us_txn_count +
+                            $purchase_cb_on_us_cb_count +
+                            $purchase_cb__us_txn_count;
+
+
+           Batch::create([
+
+               'imei' => $request->imei,
+           ]);
+
+
+        Transactions::create([
+
+            'txn_type_id'         => BATCH_CUT_OFF,
+            'tax'                 => '0.00',
+            'revenue_fees'        => '0.00',
+            'interchange_fees'    => '0.00',
+            'zimswitch_fee'       => '0.00',
+            'transaction_amount'  => '0.00',
+            'total_debited'       => '0.00',
+            'total_credited'      => '0.00',
+            'batch_id'            => '',
+            'switch_reference'    => '',
+            'merchant_id'         => '',
+            'transaction_status'  => 1,
+            'account_debited'     => '',
+            'pan'                 => '',
+            'description'         => 'BALANCE ENQUIRY OFF US',
+
+
         ]);
 
 
-        Transaction::create([
 
-            'transaction_type' => Batch_Cut_Off,
-            'status'           => 'COMPLETED',
-            'account'          => '',
-            'pan'              => '',
-            'credit'           => '0.00',
-            'debit'            => '0.00',
-            'description'      => 'Batch Cut Off',
-            'fee'              => '0.00',
-            'batch_id'         => '',
-            'merchant'         => $request->imei,
-        ]);
+           return response([
 
-        return response([
-
-            'code'                                => '00',
-            'description'                         => 'Success',
-            'currency'                            => $currency->currency ,
-            'total_credits'                       =>  $total_credits,
-            'total_number_of_txns'                => "$total_count"
+               'code'                                => '00',
+               'description'                         => 'Success',
+               'currency'                            => $currency->currency ,
+               'total_credits'                       =>  $total_credits,
+               'total_number_of_txns'                => "$total_count"
 
 
-        ]);
-
+           ]);
 
 
     }
