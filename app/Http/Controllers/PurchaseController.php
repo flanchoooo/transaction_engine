@@ -666,7 +666,6 @@ class PurchaseController extends Controller
 
     }
 
-
     public function purchase_off_us(Request $request)
     {
         //return  $transaction_type = TransactionType::find(65);
@@ -934,7 +933,7 @@ class PurchaseController extends Controller
 
                 return response([
                     'code' => '902',
-                    'description' => 'Invalid mount',
+                    'description' => 'Amount exceeds limit per transaction.',
 
                 ]);
             }
@@ -989,9 +988,9 @@ class PurchaseController extends Controller
             }
 
 
-                $zimswitch = ZIMSWITCH;
-                $revenue = REVENUE;
-                $tax = TAX;
+                 $zimswitch = Accounts::find(1);
+                $revenue = Accounts::find(2);
+                $tax = Accounts::find(3);
 
                 $credit_zimswitch_account = $fees_charged['zimswitch_fee']
                                           + $fees_charged['acquirer_fee']
@@ -1015,7 +1014,7 @@ class PurchaseController extends Controller
 
                 $credit_tax = array('SerialNo' => '472100',
                     'OurBranchID' => $branch_id,
-                    'AccountID' => $tax,
+                    'AccountID' => $tax->account_number,
                     'TrxDescriptionID' => '008',
                     'TrxDescription' => 'Purchase off us, credit tax',
                     'TrxAmount' => $fees_charged['tax']);
@@ -1023,14 +1022,14 @@ class PurchaseController extends Controller
 
                  $credit_zimswitch = array('SerialNo' => '472100',
                     'OurBranchID' => $branch_id,
-                    'AccountID' => $zimswitch,
+                    'AccountID' => $zimswitch->account_number,
                     'TrxDescriptionID' => '008',
                     'TrxDescription' => 'Purchase off us, credit Zimswitch',
                     'TrxAmount' =>  $credit_zimswitch_account);
 
                 $debit_zimswitch_inter_fee = array('SerialNo' => '472100',
                     'OurBranchID' => $branch_id,
-                    'AccountID' => $zimswitch,
+                    'AccountID' => $zimswitch->account_number,
                     'TrxDescriptionID' => '007',
                     'TrxDescription' => 'Purchase off us, debit inter change fee',
                     'TrxAmount' => '-' . $fees_charged['interchange_fee']);
@@ -1038,7 +1037,7 @@ class PurchaseController extends Controller
 
                 $credit_revenue = array('SerialNo' => '472100',
                     'OurBranchID' => $branch_id,
-                    'AccountID' => $revenue,
+                    'AccountID' => $revenue->account_number,
                     'TrxDescriptionID' => '008',
                     'TrxDescription' => 'Purchase off us, credit revenue',
                     'TrxAmount' => $fees_charged['interchange_fee']);
@@ -1081,8 +1080,8 @@ class PurchaseController extends Controller
                             'transaction_amount'  => $request->amount /100,
                             'total_debited'       => $total_funds,
                             'total_credited'      => $total_funds,
-                            'batch_id'            => $response->transaction_batch_id,
-                            'switch_reference'    => $response->transaction_batch_id,
+                            'batch_id'            => '',
+                            'switch_reference'    => '',
                             'merchant_id'         => '',
                             'transaction_status'  => 1,
                             'account_debited'     => $request->account_number,
@@ -1260,7 +1259,6 @@ class PurchaseController extends Controller
 
 
     }
-
 
     public function purchase_cashback(Request $request)
     {
@@ -1701,7 +1699,6 @@ class PurchaseController extends Controller
 
     }
 
-
     public function purchase_cash_back_off_us(Request $request)
     {
 
@@ -2086,7 +2083,6 @@ class PurchaseController extends Controller
 
     }
 
-
     protected function purchase_cashback_validation(Array $data)
     {
         return Validator::make($data, [
@@ -2098,7 +2094,6 @@ class PurchaseController extends Controller
 
         ]);
     }
-
 
     protected function purchase_validation(Array $data)
     {

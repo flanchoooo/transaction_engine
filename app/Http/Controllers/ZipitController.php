@@ -279,6 +279,7 @@ class ZipitController extends Controller
                 ]
             ]);
 
+
            // return $balance_response = $result->getBody()->getContents();
             $balance_response = json_decode($result->getBody()->getContents());
 
@@ -478,6 +479,7 @@ class ZipitController extends Controller
                             'type'                  =>'ZIPIT SEND',
 
                         ]);
+
 
 
 
@@ -915,11 +917,28 @@ class ZipitController extends Controller
 
 
 
+                    $result = $client->post(env('BASE_URL') . '/api/customers', [
+
+                        'headers' => ['Authorization' => $auth, 'Content-type' => 'application/json',],
+                        'json' => [
+                            'account_number' => $request->br_account,
+                        ]
+                    ]);
+
+
+                      $responses = $result->getBody()->getContents();
+                      $zimswitch_response = json_decode($responses);
+
+
                     return response([
 
-                        'code' => '000',
-                        'batch_id' => (string)$response->transaction_batch_id,
-                        'description' => 'Success'
+                        'code'              => '000',
+                        'mobile'            => $zimswitch_response->ds_account_customer_info->mobile,
+                        'name'              => $zimswitch_response->ds_account_customer_info->account_name,
+                        'national_id'       => '22242274J26',
+                        'email'             => $zimswitch_response->ds_account_customer_info->email_id,
+                        'batch_id'          => (string)$response->transaction_batch_id,
+                        'description'       => 'Success'
 
 
                     ]);

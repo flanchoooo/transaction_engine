@@ -418,12 +418,15 @@ class BalanceController extends Controller
                           ]);
 
 
+                       $available_balance = round($balance_response->available_balance,2,PHP_ROUND_HALF_EVEN) * 100;
+                       $ledger_balance = round($balance_response->ledger_balance,2,PHP_ROUND_HALF_EVEN) * 100;
+
                             return response([
 
                                 'code'              => '000',
                                 'currency'          => $currency->currency,
-                                'available_balance' =>  round($balance_response->available_balance,2,PHP_ROUND_HALF_EVEN),
-                                'ledger_balance'    =>  round($balance_response->ledger_balance,2,PHP_ROUND_HALF_EVEN),
+                                'available_balance' => "$available_balance",
+                                'ledger_balance'    => "$ledger_balance",
                                 'batch_id'          => "$response->transaction_batch_id",
 
                             ]);
@@ -823,7 +826,7 @@ class BalanceController extends Controller
                         ],
                     ]);
 
-                    //$response_ = $result->getBody()->getContents();
+                      //$response_ = $result->getBody()->getContents();
                     $response = json_decode($result->getBody()->getContents());
 
 
@@ -840,8 +843,8 @@ class BalanceController extends Controller
                             'transaction_amount'  => '0.00',
                             'total_debited'       => $fees_result['fees_charged'],
                             'total_credited'      => $fees_result['fees_charged'],
-                            'batch_id'            => $response->transaction_batch_id,
-                            'switch_reference'    => $response->transaction_batch_id,
+                            'batch_id'            => '',
+                            'switch_reference'    => '',
                             'merchant_id'         => '',
                             'transaction_status'  => 0,
                             'account_debited'     => $request->account_number,
@@ -853,7 +856,7 @@ class BalanceController extends Controller
 
                         return response([
                             'code'        => '100',
-                            'description' => 'Failed to process transaction.',
+                            'description' => 'BR:  '.$response->description,
 
 
                         ]);
@@ -950,14 +953,14 @@ class BalanceController extends Controller
                                        'OurBranchID'      => $branch_id,
                                        'AccountID'        => $request->account_number,
                                        'TrxDescriptionID' => '007',
-                                       'TrxDescription'   => 'Transfer Fees Debit',
+                                       'TrxDescription'   => 'Balance Fees Debit',
                                        'TrxAmount'        => '-' . $fees_result['fees_charged']);
 
                 $credit_zimswitch = array('SerialNo'         => '472100',
                                           'OurBranchID'      => $branch_id,
                                           'AccountID'        => $zimswitch_account->account_number,
                                           'TrxDescriptionID' => '008',
-                                          'TrxDescription'   => "Revenue Account Credit",
+                                          'TrxDescription'   => "Zimswitch Revenue Account Credit",
                                           'TrxAmount'        => $fees_result['zimswitch_fee']);
 
 
@@ -1020,7 +1023,7 @@ class BalanceController extends Controller
                             'batch_id'            => $response->transaction_batch_id,
                             'switch_reference'    => $response->transaction_batch_id,
                             'merchant_id'         => '',
-                            'transaction_status'  => 0,
+                            'transaction_status'  => 1,
                             'account_debited'     => $request->account_number,
                             'pan'                 => $request->card_number,
 
@@ -1029,14 +1032,17 @@ class BalanceController extends Controller
                         ]);
 
 
+                        $available_balance = round($balance_response->available_balance,2,PHP_ROUND_HALF_EVEN) * 100;
+                        $ledger_balance = round($balance_response->ledger_balance,2,PHP_ROUND_HALF_EVEN) * 100;
+
 
                         return response([
 
                             'code'              => '000',
-                            'fees_charged'      => $fees_result['fees_charged'],
+                            'fees_charged'      => $fees_result['fees_charged'] * 100,
                             'currency'          => $currency->currency,
-                            'available_balance' => round($balance_response->available_balance,2,PHP_ROUND_HALF_EVEN),
-                            'ledger_balance'    => round($balance_response->ledger_balance,2,PHP_ROUND_HALF_EVEN),
+                            'available_balance' => "$available_balance",
+                            'ledger_balance'    => "$ledger_balance",
                             'batch_id'          => "$response->transaction_batch_id",
                             'description'       => "SUCCESS",
 

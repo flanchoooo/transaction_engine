@@ -96,9 +96,15 @@ define('CREATE_VALUE','18');
 define('ZIPIT_SEND','19');
 define('ZIPIT_RECEIVE','20');
 define('BATCH_CUT_OFF','21');
-define('REVENUE','1005A087');
-define('TAX','9700Z000');
-define('ZIMSWITCH','8400N006');
+define('REVENUE','001202000009931');
+define('TAX','00120100008181');
+define('ZIMSWITCH','00120200012442');
 define('REVERSAL','22');
+
+
+
+//define('REVENUE','1005A087');
+//define('TAX','9700Z000');
+//define('ZIMSWITCH','8400N006');
 
 
