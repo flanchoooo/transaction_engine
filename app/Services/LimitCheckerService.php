@@ -20,45 +20,23 @@ use GuzzleHttp\Exception\RequestException;
 
 class LimitCheckerService
 {
-    public static function checkLimit($product_id,$card)
+    public static function checkLimit($account_number)
     {
 
+        $transactions  = Transactions::where('account_debited',$request->br_account)
+            ->where('txn_type_id',ZIPIT_SEND)
+            ->whereDate('created_at', Carbon::today())
+            ->get()->count();
 
+        if($transactions > $fees_result['maximum_daily'] ){
 
+            return response([
+                'code' => '902',
+                'description' => 'You have reached your transaction limit for the day.',
 
-        $fee_result = Fee::where('product_id', $product_id)->get();
-
-        foreach ($fee_result as $res){
-
-        $max_daily_limit = $res->max_daily_limit;
-
-
+            ]);
         }
-         $max_daily_limit;
 
-        //return Carbon::today()->toDateString();
-
-        $txn_result = Transaction::all()
-            ->where('transaction_date',Carbon::today()->toDateString())
-            ->where('card',$card)->sum('debit');
-
-
-        if($txn_result > $max_daily_limit){
-
-            return array(
-                //Transaction not permitted to cardholder
-                'code' => '57',
-
-            );
-
-        }else {
-
-            return array(
-
-                'code' => '00' ,
-            );
-
-        }
 
 
 

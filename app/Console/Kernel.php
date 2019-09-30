@@ -13,7 +13,9 @@ class Kernel extends ConsoleKernel
      * @var array
      */
     protected $commands = [
-        \App\Console\Commands\Txns::class
+        \App\Console\Commands\Txns::class,
+        \App\Console\Commands\Purchase::class,
+        \App\Console\Commands\Cash::class
     ];
 
     /**
@@ -25,7 +27,9 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule)
     {
 
-        $schedule->command('txns:run')->everyMinute();
+        $schedule->command('balance_enquiry:run')->everyMinute();
+        $schedule->command('purchase:run')->everyMinute();
+        $schedule->command('cash:run')->everyMinute();
 
 
     }

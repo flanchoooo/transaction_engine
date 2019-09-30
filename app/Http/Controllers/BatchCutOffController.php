@@ -44,6 +44,9 @@ class BatchCutOffController extends Controller
         $start = Carbon::parse($batch->created_at);
         $end = Carbon::now();
 
+
+
+
         /*
         $balance_transactions = Batch_Transaction::where('merchant', $request->imei)
             ->where('transaction_type', '1')
@@ -172,11 +175,11 @@ class BatchCutOffController extends Controller
             'total_credited'      => '0.00',
             'batch_id'            => '',
             'switch_reference'    => '',
-            'merchant_id'         => '',
             'transaction_status'  => 1,
             'account_debited'     => '',
             'pan'                 => '',
-            'description'         => 'BALANCE ENQUIRY OFF US',
+            'description'         => 'Transaction successfully processed. Total credits:'.$total_credits.' '. 'Number of Transactions:'.$total_count,
+            'merchant_id'         => $merchant->merchant_id,
 
 
         ]);

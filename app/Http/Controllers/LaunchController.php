@@ -21,10 +21,6 @@ class LaunchController extends Controller
     public function index(Request $request)
     {
 
-
-
-
-            //API INPUT VALIDATION
             $validator = $this->launch($request->all());
             if ($validator->fails()) {
                 return response()->json(['code' => '99', 'description' => $validator->errors()]);

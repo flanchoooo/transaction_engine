@@ -27,9 +27,6 @@ use Illuminate\Support\Facades\Validator;
 class WalletController extends Controller
 {
 
-
-
-
     public function wallet_sign_up(Request $request){
 
 
@@ -123,10 +120,6 @@ class WalletController extends Controller
 
 
     }
-
-
-
-
     protected function wallet_kyc(Array $data)
     {
         return Validator::make($data, [
@@ -143,7 +136,6 @@ class WalletController extends Controller
 
 
     }
-
 
 }
 

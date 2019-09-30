@@ -58,7 +58,8 @@ class WalletEValueController extends Controller
             'txn_type'          => $request->txn_type,
             'state'             => $request->state,
             'initiated_by'      => $request->initiated_by,
-            'narration'         => $request->narration
+            'narration'       => $request->narration,
+            'description'       => $request->description
 
         ]);
 
@@ -92,7 +93,7 @@ class WalletEValueController extends Controller
 
 
 
-        $source = Wallet::where('mobile',$request->source_mobile)->get()->first();
+         $source = Wallet::where('mobile',$request->source_mobile)->get()->first();
         $mobi = substr_replace($source->mobile, '', -10, 3);
         $time_stamp = Carbon::now()->format('ymdhis');
         $reference = $request->bill_payment_id . $time_stamp . $mobi;
@@ -285,17 +286,13 @@ class WalletEValueController extends Controller
         $total_deductions = $id->amount;
 
 
-
+        DB::beginTransaction();
 
         try {
 
-            DB::beginTransaction();
-
-
-            $new_balance = $destination_mobile->balance + $total_deductions;
-
             $destination_mobile->lockForUpdate()->first();
-            $destination_mobile->balance =number_format((float)$new_balance, 4, '.', '');;
+            $new_balance = $destination_mobile->balance + $total_deductions;
+            $destination_mobile->balance = number_format((float)$new_balance, 4, '.', '');;
             $destination_mobile->save();
 
             //Deduct funds from source account
@@ -347,7 +344,7 @@ class WalletEValueController extends Controller
             'revenue_fees'        => '0.00',
             'interchange_fees'    => '0.00',
             'zimswitch_fee'       => '0.00',
-            'transaction_amount'  => '0.00',
+            'transaction_amount'  => $total_deductions,
             'total_debited'       => $total_deductions,
             'total_credited'      => '',
             'batch_id'            => $reference,
@@ -358,6 +355,8 @@ class WalletEValueController extends Controller
             'pan'                 => '',
             'merchant_account'    => '',
             'account_credited'    => $destination_mobile->mobile,
+            'balance_after_txn'   => $new_balance,
+            'description'         => $request->description,
 
 
         ]);
@@ -475,10 +474,8 @@ class WalletEValueController extends Controller
 
             DB::beginTransaction();
 
-
-            $new_balance = $destination_mobile->balance - $total_deductions;
-
             $destination_mobile->lockForUpdate()->first();
+            $new_balance = $destination_mobile->balance - $total_deductions;
             $destination_mobile->balance =number_format((float)$new_balance, 4, '.', '');;
             $destination_mobile->save();
 
@@ -499,8 +496,8 @@ class WalletEValueController extends Controller
                 'interchange_fees'    => '0.00',
                 'zimswitch_fee'       => '0.00',
                 'transaction_amount'  => '0.00',
-                'total_debited'       => '0.00',
-                'total_credited'      => $total_deductions,
+                'total_debited'       => $id->amount,
+                'total_credited'      => '0.00',
                 'batch_id'            => $reference,
                 'switch_reference'    => $reference,
                 'merchant_id'         => '',
@@ -531,7 +528,7 @@ class WalletEValueController extends Controller
             'revenue_fees'        => '0.00',
             'interchange_fees'    => '0.00',
             'zimswitch_fee'       => '0.00',
-            'transaction_amount'  => '0.00',
+            'transaction_amount'  => $total_deductions,
             'total_debited'       => $total_deductions,
             'total_credited'      => '',
             'batch_id'            => $reference,
@@ -541,7 +538,9 @@ class WalletEValueController extends Controller
             'account_debited'     => '',
             'pan'                 => '',
             'merchant_account'    => '',
-            'account_credited'    => $destination_mobile->mobile,
+            'account_credited'    => $id->account_number,
+            'description'         => 'Transaction successfully processed.',
+            'balance_after_txn'   => $new_balance,
 
 
         ]);

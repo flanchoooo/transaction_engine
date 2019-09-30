@@ -111,14 +111,16 @@ class FeesCalculatorService
         //return $cash_back_fee;
 
         return array(
-            'fees_charged'    => $fees_charged,
-            'zimswitch_fee'   => $zimswitch_fee,
-            'interchange_fee' => $interchange_fee,
-            'acquirer_fee'    => $acquirer_fee,
-            'cash_back_fee'   => $cash_back_fee,
-            'tax'             => $tax,
-            'mdr'             => $merchant_service_commission,
-            'maximum_daily'   => $fee->maximum_daily,
+            'fees_charged'          => $fees_charged,
+            'zimswitch_fee'         => $zimswitch_fee,
+            'interchange_fee'       => $interchange_fee,
+            'acquirer_fee'          => $acquirer_fee,
+            'cash_back_fee'         => $cash_back_fee,
+            'tax'                   => $tax,
+            'mdr'                   => $merchant_service_commission,
+            'maximum_daily'         => $fee->maximum_daily,
+            'transaction_count'     => $fee->transaction_count,
+            'minimum_balance'       => $fee->minimum_balance,
 
         );
 

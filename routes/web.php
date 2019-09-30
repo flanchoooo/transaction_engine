@@ -42,9 +42,37 @@ $router->get('/loaderio-8cac7463ae09a319247f053ee1fb3acd/', 'UserController@test
 
 $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
 
-    $app->post('balance',  'BalanceController@balance');
+
+    //Balance Enquiry
+    $app->post('balance',  'BalanceOnUsController@balance');
+    $app->post('balance_off_us',  'BalanceOffUsController@balance_off_us');
+    $app->get('balance_bank_x',  'BalanceBankXController@balance');
+
+
+    //Purchase
+    $app->post('purchase',  'PurchaseOnUsController@purchase');
+    $app->post('purchase_off_us',  'PurchaseOffUsController@purchase_off_us');
+
+    //Banking
+    $app->post('cash_withdrawal',  'WithdrawalOnUsController@cash_withdrawal');
+    $app->post('cash_deposit',  'CashDepositController@cash_deposit');
+
+
+    //Sale + Cash
+    $app->post('purchase_cashback',  'PurchaseCashOnUsController@purchase_cashback');
+    $app->post('purchase_cash_back_off_us',  'PurchaseCashOffUsController@purchase_cash_back_off_us');
+
+
+    //Batch
+    $app->post('batch',  'BatchCutOffController@batch');
+
+    //Cash In Txn
+    $app->post('/cash_in_preauth',  'WalletCashInController@cash_in_preauth');
+    $app->post('/cash_in',  'WalletCashInController@cash_in');
+    $app->post('/cash_out',  'WalletCashOutController@cash_out');
+
+
     $app->post('mini-statement',  'BalanceController@mini');
-    $app->post('purchase',  'PurchaseController@purchase'); // Refactored
     $app->post('history',  'TransactionHistoryController@history');
     $app->post('batch',  'BatchCutOffController@batch');
     $app->post('last_transaction',  'BatchCutOffController@last_transaction');
@@ -55,21 +83,12 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
     $app->post('customer_info',  'DepositController@info');
     $app->post('deposit',  'DepositController@deposit'); // Refactored
     $app->post('withdrawal',  'WithdrawalController@withdrawal');// Refactored
-    $app->post('purchase_cashback',  'PurchaseController@purchase_cashback'); // Refactored
+     // Refactored
     $app->post('launch',  'LaunchController@index'); // Refactored
 
-    //Balance Getbucks Card on Bank X POS
-    $app->post('balance_off_us',  'BalanceController@balance_off_us');
-    $app->post('purchase_off_us',  'PurchaseController@purchase_off_us');
-    $app->post('purchase_cash_back_off_us',  'PurchaseController@purchase_cash_back_off_us');
-
-
-    //Balance BankX
-    $app->get('balance_bank_x',  'BalanceBankXController@balance');
 
 
     //Wallet Support
-    $app->get('cash_in',  'WalletCashInController@cash_in_business');
     $app->post('adjustment_preauth',  'WalletAdjustmentsController@adjustment_preauth');
     $app->post('adjustment',  'WalletEValueController@adjustment');
     $app->post('create_value',  'WalletEValueController@create_value');

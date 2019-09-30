@@ -16,7 +16,8 @@ class Fee extends Model implements Authenticatable
     use AuthenticableTrait;
 
     protected $guarded = [];
-
+    protected $keyType = 'bigint';
+    protected $casts = ['id' => 'bigint'];
     protected $table = 'fee';
 
 

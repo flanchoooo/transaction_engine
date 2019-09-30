@@ -18,8 +18,9 @@ use Illuminate\Auth\Authenticatable as AuthenticableTrait;
 class TransactionType extends Model implements Authenticatable
 {
     use AuthenticableTrait;
-
-    protected $table = 'transaction_type';
+    protected $keyType = 'bigint';
+    protected $casts = ['id' => 'bigint'];
+    protected $table = 'txn_type';
 
 
 }
