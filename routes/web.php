@@ -129,6 +129,12 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
     $app->post('employee_logout',  'EmployeeController@employee_logout');
     $app->post('change_status',  'EmployeeController@change_status');
 
+    //Bulk Disbursements
+    $app->post('bulk_upload',  'WalletDisbursementsController@bulk_upload');
+    $app->post('disburse',  'WalletDisbursementsController@disburse');
+    $app->get('/disburse/all',  'WalletDisbursementsController@all');
+
+
 
 
 });
