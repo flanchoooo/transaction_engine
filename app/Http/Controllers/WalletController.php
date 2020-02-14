@@ -35,7 +35,7 @@ class WalletController extends Controller
             return response()->json(['code' => '99', 'description' => $validator->errors()]);
         }
 
-         $pin  = $request->pin;
+        $pin  = $request->pin;
 
         $account_prefix = '0012';
         $account = mt_rand(10000000, 99999999);
@@ -45,76 +45,160 @@ class WalletController extends Controller
         $mobile_number_length = strlen($request->mobile);
 
 
-      if ($mobile_number_length < 10){
+        if ($mobile_number_length < 10){
 
-          return response([
+            return response([
 
-              'code' => '01',
-              'description' => 'Invalid Mobile number'
+                'code' => '01',
+                'description' => 'Invalid Mobile number'
 
-          ]);
-
-      }
-
-
-
-       /* if ($mobile_number_length = 10){
-
-           $out = ltrim($request->mobile, "0");
-           $mobile_code = License::find(1);
-           $mobile = $mobile_code->mobile_code.$out;
+            ]);
 
         }
 
-       */
+
+
+        /* if ($mobile_number_length = 10){
+
+            $out = ltrim($request->mobile, "0");
+            $mobile_code = License::find(1);
+            $mobile = $mobile_code->mobile_code.$out;
+
+         }
+
+        */
 
 
 
 
-       try {
+        try {
+
+            Wallet::create([
+                'mobile'                 => $request->mobile,
+                'account_number'         => $account_number,
+                'first_name'             => $request->first_name,
+                'last_name'              => $request->last_name,
+                'gender'                 => $request->gender,
+                'dob'                    => $request->dob,
+                'national_id'            => $request->national_id,
+                'state'                  => '1',
+                'wallet_cos_id'          => 1,
+                'auth_attempts'          => 0,
+                'pin'                    => Hash::make($pin),
+
+            ]);
+
+
+            return response([
+
+                'code' => '00',
+                'description' => 'Registration Successful.',
+
+
+            ]);
+
+        } catch (QueryException $queryException){
+
+
+            return response([
+
+                'code' => '01',
+                'description' => 'Mobile already registered',
+
+            ]);
+
+
+        }
 
 
 
 
-             Wallet::create([
+    }
 
-               'mobile' => $request->mobile,
-               'account_number' => $account_number,
-               'first_name' => $request->first_name,
-               'last_name' => $request->last_name,
-               'gender' => $request->gender,
-               'dob' => $request->dob,
-               'national_id' => $request->national_id,
-               'state' => '1',
-               'wallet_cos_id' => 1,
-               'auth_attempts' => 0,
-               'pin' => Hash::make($pin),
+    public function wallet_agent_sign_up(Request $request){
 
 
+        $validator = $this->wallet_kyc($request->all());
+        if ($validator->fails()) {
+            return response()->json(['code' => '99', 'description' => $validator->errors()]);
+        }
 
-           ]);
+        $pin  = $request->pin;
 
+        $account_prefix = '0012';
+        $account = mt_rand(10000000, 99999999);
+        $account_number = $account_prefix.$account;
 
-           return response([
-
-               'code' => '00',
-               'description' => 'Registration Successful.',
-
-
-           ]);
-
-       } catch (QueryException $queryException){
-
-
-           return response([
-
-               'code' => '01',
-               'description' => 'Mobile already registered',
-
-           ]);
+        $mobile_number_length = strlen($request->mobile);
 
 
-       }
+        if ($mobile_number_length < 10){
+            return response([
+
+                'code' => '01',
+                'description' => 'Invalid Mobile number'
+            ]);
+        }
+
+
+
+        /* if ($mobile_number_length = 10){
+
+            $out = ltrim($request->mobile, "0");
+            $mobile_code = License::find(1);
+            $mobile = $mobile_code->mobile_code.$out;
+
+         }
+
+        */
+
+
+
+
+        try {
+
+
+
+
+            Wallet::create([
+
+                'mobile' => $request->mobile,
+                'account_number' => $account_number,
+                'first_name' => $request->first_name,
+                'last_name' => $request->last_name,
+                'gender' => $request->gender,
+                'dob' => $request->dob,
+                'national_id' => $request->national_id,
+                'state' => '1',
+                'wallet_cos_id' => 1,
+                'auth_attempts' => 0,
+                'pin' => Hash::make($pin),
+
+
+
+            ]);
+
+
+            return response([
+
+                'code' => '00',
+                'description' => 'Registration Successful.',
+
+
+            ]);
+
+        } catch (QueryException $queryException){
+
+
+            return response([
+
+                'code' => '01',
+                'description' => 'Mobile already registered',
+
+            ]);
+
+
+        }
 
 
 
@@ -124,14 +208,6 @@ class WalletController extends Controller
     {
         return Validator::make($data, [
             'mobile' => 'required',
-            'first_name' => 'required',
-            'last_name' => 'required',
-            'gender' => 'required',
-            'national_id' => 'required',
-            'dob' => 'required',
-            'pin' => 'required',
-
-
         ]);
 
 

@@ -15,7 +15,12 @@ class Kernel extends ConsoleKernel
     protected $commands = [
         \App\Console\Commands\Txns::class,
         \App\Console\Commands\Purchase::class,
-        \App\Console\Commands\Cash::class
+        \App\Console\Commands\Cash::class,
+        \App\Console\Commands\SettleRevenue::class,
+        \App\Console\Commands\MdrDeduction::class,
+        \App\Console\Commands\PenaltyDeduction::class,
+        \App\Console\Commands\REVERSAL::class,
+        \App\Console\Commands\FAILED::class,
     ];
 
     /**
@@ -26,10 +31,21 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
+        $schedule->command('penalty_deduction:run')->cron('* * * * *')
+            ->withoutOverlapping();
 
-        $schedule->command('balance_enquiry:run')->everyMinute();
-        $schedule->command('purchase:run')->everyMinute();
-        $schedule->command('cash:run')->everyMinute();
+        $schedule->command('failed:run')->cron('* * * * *')
+            ->withoutOverlapping();
+
+        $schedule->command('purchase:run')->cron('* * * * *')
+            ->withoutOverlapping();
+
+        $schedule->command('cash:run')->cron('* * * * *')
+            ->withoutOverlapping();
+
+        $schedule->command('reversal:run')->cron('* * * * *')
+            ->delay(1)
+            ->withoutOverlapping();
 
 
     }

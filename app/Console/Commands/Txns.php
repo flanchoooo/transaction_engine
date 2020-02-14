@@ -48,48 +48,55 @@ class Txns extends Command
      *
      * @return mixed
      */
-    public function handle()
-    {
 
+    public function handle(){
 
+        return 0;
+        $items = PendingTxn::where('transaction_type_id', BALANCE_ENQUIRY_OFF_US)->get();
 
-
-        $item = PendingTxn::where('transaction_type_id', BALANCE_ENQUIRY_OFF_US)->get()->last();
-        $merchant_id = Devices::where('imei', $item->imei)->first();
-
-        if (!isset($item)) {
+        if (!isset($items)) {
             return response([
                 'code' => '01',
                 'description' => 'No transaction to process',
             ]);
         }
 
+        foreach ($items as $item){
+            $merchant_id = Devices::where('imei', $item->imei)->first();
+            $response = $this->balance_deduction($item->transaction_id,$merchant_id->merchant_id,$item->card_number,$item->imei);
+            if($response["code"] == '00'){
+                PendingTxn::destroy($item->id);
+            }
+        }
 
+    }
 
+    public function balance_deduction($id,$merchant,$card_number,$imei)
+    {
+        $merchant_id = Devices::where('imei', $imei)->first();
         $fees_result = FeesCalculatorService::calculateFees(
             '0.00',
             '0.00',
             BALANCE_ENQUIRY_BANK_X,
-            $merchant_id->merchant_id //Zimswitch Merchant to be created.
+            $merchant //Zimswitch Merchant to be created.
         );
 
 
-        $zimswitch_account = Accounts::find(1);
-        $revenue = Accounts::find(2);
+        $debit = array(
+            'serial_no'          => '472100',
+            'our_branch_id'       => '001',
+            'account_id'         => ZIMSWITCH,
+            'trx_description_id'  => '007',
+            'TrxDescription'    => 'Balance enquiry acquire RRN:'.$id,
+            'TrxAmount'         => '-' . $fees_result['zimswitch_fee']);
 
-        $account_debit = array('SerialNo' => '472100',
-            'OurBranchID' => '001',
-            'AccountID' => $zimswitch_account->account_number,
-            'TrxDescriptionID' => '007',
-            'TrxDescription' => 'Balance enquiry bank x card, debit  zimswitch fees',
-            'TrxAmount' => '-' . $fees_result['fees_charged']);
-
-        $credit_zimswitch = array('SerialNo' => '472100',
-            'OurBranchID' => '001',
-            'AccountID' => $revenue->account_number,
-            'TrxDescriptionID' => '008',
-            'TrxDescription' => "Balance enquiry bank x card, credit revenue with fees",
-            'TrxAmount' => $fees_result['zimswitch_fee']);
+        $credit = array(
+            'serial_no'          => '472100',
+            'our_branch_id'       => '001',
+            'account_id'         => REVENUE,
+            'trx_description_id'  => '008',
+            'TrxDescription'    => "'Balance enquiry acquired: RRN:".$id,
+            'TrxAmount'         => $fees_result['zimswitch_fee']);
 
 
         $auth = TokenService::getToken();
@@ -101,46 +108,47 @@ class Txns extends Command
                 'headers' => ['Authorization' => $auth, 'Content-type' => 'application/json',],
                 'json' => [
                     'bulk_trx_postings' => array(
-                        $account_debit,
-                        $credit_zimswitch,
+                        $debit,
+                        $credit,
                     ),
                 ],
             ]);
 
-            // $response_ = $result->getBody()->getContents();
+
+
             $response = json_decode($result->getBody()->getContents());
 
+            if($response->code == '00'){
+                Transactions::create([
 
+                    'txn_type_id'         => BALANCE_ENQUIRY_BANK_X,
+                    'revenue_fees'        => $fees_result['zimswitch_fee'],
+                    'interchange_fees'    => '0.00',
+                    'zimswitch_fee'       => '-'.$fees_result['zimswitch_fee'],
+                    'transaction_amount'  => $fees_result['zimswitch_fee'],
+                    'total_debited'       => $fees_result['zimswitch_fee'],
+                    'total_credited'      => $fees_result['zimswitch_fee'],
+                    'batch_id'            => $response->transaction_batch_id,
+                    'switch_reference'    => $response->transaction_batch_id,
+                    'merchant_id'         => $merchant_id->merchant_id,
+                    'transaction_status'  => 1,
+                    'account_debited'     => ZIMSWITCH,
+                    'account_credited'     => REVENUE,
+                    'pan'                 => $card_number,
+                    'description'         => 'Transaction successfully processed.',
 
-            //Record Txn
-            Transactions::create([
+                ]);
+            }
 
-                'txn_type_id'         => BALANCE_ENQUIRY_BANK_X,
-                'tax'                 => '0.00',
-                'revenue_fees'        => $fees_result['fees_charged'],
-                'interchange_fees'    => '0.00',
-                'zimswitch_fee'       =>  '-'.$fees_result['zimswitch_fee'],
-                'transaction_amount'  => '0.00',
-                'total_debited'       => $fees_result['fees_charged'],
-                'total_credited'      => $fees_result['fees_charged'],
-                'batch_id'            => $response->transaction_batch_id,
-                'switch_reference'    => $response->transaction_batch_id,
-                'merchant_id'         => $merchant_id->merchant_id,
-                'transaction_status'  => 1,
-                'account_debited'     => $zimswitch_account->account_number,
-                'pan'                 =>  str_limit($item->card_number, 16, ''),
-                'description'         => 'Transaction successfully processed.',
-
-
-            ]);
-
-            PendingTxn::destroy($item->id);
+            return array(
+                'code' => $response->code
+            );
 
 
         }catch (ClientException $exception){
 
+            //  return $exception;
             Transactions::create([
-
                 'txn_type_id'         => BALANCE_ENQUIRY_BANK_X,
                 'tax'                 => '0.00',
                 'revenue_fees'        => '0.00',
@@ -151,20 +159,23 @@ class Txns extends Command
                 'total_credited'      => '0.00',
                 'batch_id'            => '',
                 'switch_reference'    => '',
-                'merchant_id'         => $merchant_id->merchant_id,
+                'merchant_id'         => $merchant,
                 'transaction_status'  => 0,
                 'account_debited'     => '',
-                'pan'                 =>  str_limit($item->card_number, 16, ''),
+                'pan'                 =>  str_limit($card_number, 16, ''),
                 'description'         => 'Failed to process the transaction',
 
             ]);
 
-            PendingTxn::destroy($item->id);
+
+            return array(
+                'code' => '01'
+            );
 
         }
 
-
     }
+
 
 
 

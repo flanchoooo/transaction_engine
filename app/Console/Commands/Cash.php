@@ -3,10 +3,15 @@
 namespace App\Console\Commands;
 
 use App\Accounts;
+use App\Deduct;
 use App\Devices;
+use App\Jobs\NotifyBills;
+use App\MDR;
+use App\Merchant;
 use App\MerchantAccount;
 use App\PendingTxn;
 use App\Services\FeesCalculatorService;
+use App\Services\LoggingService;
 use App\Services\TokenService;
 use App\Transactions;
 use GuzzleHttp\Client;
@@ -45,96 +50,94 @@ class Cash extends Command
      *
      * @return mixed
      */
-    public function handle()
-    {
+    public function purchase_off_us(){
 
+        $items = PendingTxn::where('transaction_type_id', PURCHASE_CASH_BACK_OFF_US)
+            ->where('status', 'DRAFT')
+            ->get();
 
-        $type = PendingTxn::where('transaction_type_id', PURCHASE_CASH_BACK_OFF_US)->get()->last();
-        if (!isset($type)) {
+        if ($items->isEmpty()) {
             return response([
                 'code' => '01',
                 'description' => 'No transaction to process',
             ]);
         }
 
-        $card_number = str_limit($type->card_number, 16, '');
-        $amount = $type->amount;
-        $cash_back_amount = $type->cash_back_amount;
-        $merchant_id = Devices::where('imei', $type->imei)->first();
-        $merchant_account = MerchantAccount::where('merchant_id', $merchant_id->merchant_id)->first();
+        foreach ($items as $item){
+            $merchant_id = Devices::where('imei', $item->imei)->first();
+            $response = $this->purchase_deduction($item->transaction_id,$item->card_number,$merchant_id->merchant_id,$item->amount,$item->cash_back_amount,$item->imei);
+            if($response["code"] == '00'){
+                LoggingService::message('Merchant settled successfully');
+                $item->status= 'COMPLETED';
+                $item->save();
+                echo $merchant_id->merchant_id.' '. 'Merchant settled successfully';
+            }
+        }
+
+    }
+
+    public function purchase_deduction($id,$card,$merchant,$amount,$cash_amount,$imei)
+    {
+
+
+        $card_number = str_limit($card, 16, '');
+        $cash_back_amount = $cash_amount;
+        $merchant_account = MerchantAccount::where('merchant_id', $merchant)->first();
         $branch_id = substr( $merchant_account->account_number, 0, 3);
 
-        $merchant_account->account_number;
+        $purchase_amount = $amount - $cash_amount;
 
-        //Balance Enquiry On Us Debit Fees
 
         try {
 
-
             $fees_result = FeesCalculatorService::calculateFees(
-                $amount,
+                $purchase_amount,
                 $cash_back_amount,
                 PURCHASE_CASH_BACK_BANK_X,
-                $merchant_id->merchant_id
+                $merchant,$merchant_account->account_number
 
             );
 
-            $total_funds = $amount + $cash_back_amount + $fees_result['interchange_fee'] + $fees_result['acquirer_fee'];
+            $total_funds = $purchase_amount + $cash_back_amount + $fees_result['interchange_fee'] + $fees_result['acquirer_fee'];
 
 
-            $revenue = Accounts::find(2);
-            $zimswitch = Accounts::find(1);
+            $debit_zimswitch  = array(
+                'serial_no'          => '472100',
+                'our_branch_id'       => $branch_id,
+                'account_id'         => ZIMSWITCH,
+                'trx_description_id'  => '007',
+                'trx_description'    => 'POS SALE & CASH RRN'.$id,
+                'trx_amount'         => '-' . $amount );
 
-
-            $debit_zimswitch = array('SerialNo' => '472100',
-                'OurBranchID' => $branch_id,
-                'AccountID' => $zimswitch->account_number,
-                'TrxDescriptionID' => '007',
-                'TrxDescription' => 'Purchase + Cash back bank x, debit zimswitch',
-                'TrxAmount' => '-' . $total_funds );
-
-            $credit_merchant_purchase = array('SerialNo' => '472100',
-                'OurBranchID' => $branch_id,
-                'AccountID' => $merchant_account->account_number,
-                'TrxDescriptionID' => '008',
-                'TrxDescription' => 'Purchase + Cash back bank x, credit merchant purchase amount',
-                'TrxAmount' => $amount);
-
-            $credit_merchant_cash = array('SerialNo' => '472100',
-                'OurBranchID' => $branch_id,
-                'AccountID' => $merchant_account->account_number,
-                'TrxDescriptionID' => '008',
-                'TrxDescription' => 'Purchase + Cash back bank x, credit merchant cash amount',
-                'TrxAmount' => $cash_back_amount);
-
-            $credit_revenue = array('SerialNo' => '472100',
-                'OurBranchID' => $branch_id,
-                'AccountID' => $revenue->account_number,
-                'TrxDescriptionID' => '008',
-                'TrxDescription' => 'Purchase + Cash back bank x, credit revenue',
-                'TrxAmount' => $fees_result['interchange_fee'] + $fees_result['acquirer_fee']);
-
-            $debit_merchant_mdr = array('SerialNo' => '472100',
-                'OurBranchID' => $branch_id,
-                'AccountID' => $merchant_account->account_number,
-                'TrxDescriptionID' => '007',
-                'TrxDescription' => 'Purchase + Cash back bank x, debit merchant  mdr fees',
-                'TrxAmount' => '-' . $fees_result['mdr']);
-
-
-            $credit_revenue_mdr = array('SerialNo' => '472100',
-                'OurBranchID' => $branch_id,
-                'AccountID' => $revenue->account_number,
-                'TrxDescriptionID' => '008',
-                'TrxDescription' => 'Purchase + Cash back bank x, credit merchant purchase amount',
-                'TrxAmount' => $fees_result['mdr']);
+            $credit_merchant_purchase = array(
+                'serial_no'         => '472100',
+                'our_branch_id'      => $branch_id,
+                'account_id'        => $merchant_account->account_number,
+                'trx_description_id' => '008',
+                'trx_description'   => 'POS SALE & CASH RRN'.$id,
+                'trx_amount'        => $amount);
 
 
 
+            $debit = array(
+                'serial_no'             => '472100',
+                'our_branch_id'         => $branch_id,
+                'account_id'            => ZIMSWITCH,
+                'trx_description_id'    => '007',
+                'trx_description'       => 'POS SALE Acquirer Fee:'.$id,
+                'trx_amount'            => '-' . $fees_result['acquirer_fee']);
 
 
+            $credit = array(
+                'serial_no'             => '472100',
+                'our_branch_id'         => substr($merchant_account->account_number, 0, 3),
+                'account_id'             => REVENUE,
+                'trx_description_id'    => '008',
+                'trx_description'       => 'POS SALE Acquirer Fee:'.$id,
+                'trx_amount'            => $fees_result['acquirer_fee']);
 
-            $auth = TokenService::getToken();
+
+            $auth = 'Test';
             $client = new Client();
 
             try {
@@ -145,165 +148,89 @@ class Cash extends Command
                         'bulk_trx_postings' => array(
                             $debit_zimswitch,
                             $credit_merchant_purchase,
-                            $credit_merchant_cash,
-                            $credit_revenue,
-                            $debit_merchant_mdr,
-                            $credit_revenue_mdr,
+                            $debit,
+                            $credit
                         ),
                     ]
 
                 ]);
 
 
-                // return  $response = $result->getBody()->getContents();
                 $response = json_decode($result->getBody()->getContents());
                 $revenue_fees = $fees_result['interchange_fee'] + $fees_result['acquirer_fee'] + $fees_result['mdr'];
                 $merchant_account_amount = - $fees_result['mdr'] + $amount + $cash_back_amount;
 
-
-
-                if($response->code != '00'){
-
+                if($response->code == '00'){
                     Transactions::create([
 
                         'txn_type_id'         => PURCHASE_CASH_BACK_BANK_X,
-                        'tax'                 => '0.00',
-                        'revenue_fees'        => '0.00',
+                        'revenue_fees'        => $revenue_fees,
                         'interchange_fees'    => '0.00',
-                        'zimswitch_fee'       => '0.00',
-                        'transaction_amount'  => '0.00',
-                        'total_debited'       => '0.00',
-                        'total_credited'      => '0.00',
-                        'batch_id'            => '',
-                        'switch_reference'    => '',
-                        'merchant_id'         => $merchant_id->merchant_id,
-                        'transaction_status'  => 0,
-                        'account_debited'     => '',
-                        'pan'                 => '',
-                        'merchant_account'    => '',
-                        'description'         => $response->description,
+                        'zimswitch_fee'       => '-'.$total_funds,
+                        'tax'                 => '0.00',
+                        'transaction_amount'  => $amount,
+                        'total_debited'       => $total_funds,
+                        'total_credited'      => $total_funds,
+                        'batch_id'            => $response->transaction_batch_id,
+                        'switch_reference'    => $id,
+                        'merchant_id'         => $merchant,
+                        'transaction_status'  => 1,
+                        'account_debited'     => ZIMSWITCH,
+                        'pan'                 => $card_number,
+                        'merchant_account'    => $merchant_account_amount,
+                        'description'         => 'Transaction successfully processed.',
+                        'debit_mdr_from_merchant' => '-'. $fees_result['mdr'],
+                        'cash_back_amount'    => $cash_back_amount,
 
                     ]);
 
-                    return;
+                    $auto_deduction = new Deduct();
+                    $auto_deduction->imei = '000';
+                    $auto_deduction->amount = $fees_result['mdr'];
+                    $auto_deduction->source_account = $merchant_account->account_number;
+                    $auto_deduction->destination_account = REVENUE;
+                    $auto_deduction->txn_status = 'PENDING';
+                    $auto_deduction->wallet_batch_id = $response->transaction_batch_id;
+                    $auto_deduction->description = "Merchant service fee RRN: $id";
+                    $auto_deduction->save();
+
+                    MDR::create([
+                        'amount'            => $fees_result['mdr'],
+                        'imei'              => $imei,
+                        'merchant'          => $merchant,
+                        'source_account'    => $merchant_account->account_number,
+                        'txn_status'        => 'PENDING',
+                        'batch_id'          => $response->transaction_batch_id,
+
+                    ]);
+
+                    return array(
+                        'code' => $response->code
+                    );
 
                 }
 
 
-                Transactions::create([
-
-                    'txn_type_id'         => PURCHASE_CASH_BACK_BANK_X,
-                    'revenue_fees'        => $revenue_fees,
-                    'interchange_fees'    => '0.00',
-                    'zimswitch_fee'       => '-'.$total_funds,
-                    'tax'                 => '0.00',
-                    'transaction_amount'  => $type->amount,
-                    'total_debited'       => $total_funds,
-                    'total_credited'      => $total_funds,
-                    'batch_id'            => $response->transaction_batch_id,
-                    'switch_reference'    => $response->transaction_batch_id,
-                    'merchant_id'         => $merchant_id->merchant_id,
-                    'transaction_status'  => 1,
-                    'account_debited'     => $zimswitch->account_number,
-                    'pan'                 => $card_number,
-                    'merchant_account'    => $merchant_account_amount,
-                    'description'         => 'Transaction successfully processed.',
-                    'debit_mdr_from_merchant' => '-'. $fees_result['mdr'],
-                    'cash_back_amount'    => $cash_back_amount,
-
-                ]);
-
-
-                PendingTxn::destroy($type->id);
-
             } catch (ClientException $exception) {
-
-
-
-                Transactions::create([
-
-                    'txn_type_id'         => PURCHASE_CASH_BACK_BANK_X,
-                    'tax'                 => '0.00',
-                    'revenue_fees'        => '0.00',
-                    'interchange_fees'    => '0.00',
-                    'zimswitch_fee'       => '0.00',
-                    'transaction_amount'  => '0.00',
-                    'total_debited'       => '0.00',
-                    'total_credited'      => '0.00',
-                    'batch_id'            => '',
-                    'switch_reference'    => '',
-                    'merchant_id'         => $merchant_id->merchant_id,
-                    'transaction_status'  => 0,
-                    'account_debited'     => '',
-                    'pan'                 => '',
-                    'merchant_account'    => '',
-                    'description'         => 'Failed to process transaction',
-
-                ]);
-
+                return array(
+                    'code' => '01'
+                );
             }
 
         } catch (RequestException $e) {
             if ($e->hasResponse()) {
                 $exception = (string)$e->getResponse()->getBody();
                 $exception = json_decode($exception);
-
-
-
-                Transactions::create([
-
-                    'txn_type_id'         => PURCHASE_CASH_BACK_BANK_X,
-                    'tax'                 => '0.00',
-                    'revenue_fees'        => '0.00',
-                    'interchange_fees'    => '0.00',
-                    'zimswitch_fee'       => '0.00',
-                    'transaction_amount'  => '0.00',
-                    'total_debited'       => '0.00',
-                    'total_credited'      => '0.00',
-                    'batch_id'            => '',
-                    'switch_reference'    => '',
-                    'merchant_id'         => $merchant_id->merchant_id,
-                    'transaction_status'  => 0,
-                    'account_debited'     => '',
-                    'pan'                 => '',
-                    'merchant_account'    => '',
-                    'description'         => 'Failed to process transaction',
-
-                ]);
-
-                return array('code' => '91',
-                    'error' => $exception);
-
-                PendingTxn::destroy($type->id);
+                return array(
+                    'code' => '01'
+                );
 
             } else {
-
-                Transactions::create([
-
-                    'txn_type_id'         => PURCHASE_CASH_BACK_BANK_X,
-                    'tax'                 => '0.00',
-                    'revenue_fees'        => '0.00',
-                    'interchange_fees'    => '0.00',
-                    'zimswitch_fee'       => '0.00',
-                    'transaction_amount'  => '0.00',
-                    'total_debited'       => '0.00',
-                    'total_credited'      => '0.00',
-                    'batch_id'            => '',
-                    'switch_reference'    => '',
-                    'merchant_id'         => $merchant_id->merchant_id,
-                    'transaction_status'  => 0,
-                    'account_debited'     => '',
-                    'pan'                 => '',
-                    'merchant_account'    => '',
-                    'description'         => 'Failed to process transaction',
-
-                ]);
-
-                PendingTxn::destroy($type->id);
+                return array(
+                    'code' => '01'
+                );
             }
         }
-
-
 
     }
 

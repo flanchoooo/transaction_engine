@@ -52,18 +52,18 @@ class BalanceEnquiryOnUsJob extends Job
         $authentication  = TokenService::getToken();
 
         $account_debit = array(
-            'SerialNo'          => '472100',
-            'OurBranchID'       => $branch_id,
-            'AccountID'         => $this->account_number,
-            'TrxDescriptionID'  => '007',
+            'serial_no'          => '472100',
+            'our_branch_id'       => $branch_id,
+            'account_id'         => $this->account_number,
+            'trx_description_id'  => '007',
             'TrxDescription'    => 'Balance enquiry on us,debit fees',
             'TrxAmount'         => '-' . $this->fees_charged);
 
         $bank_revenue_credit    = array(
-            'SerialNo'          => '472100',
-            'OurBranchID'       => $branch_id,
-            'AccountID'         => REVENUE,
-            'TrxDescriptionID'  => '008',
+            'serial_no'          => '472100',
+            'our_branch_id'       => $branch_id,
+            'account_id'         => REVENUE,
+            'trx_description_id'  => '008',
             'TrxDescription'    => "Balance enquiry on us,credit revenue with fees",
             'TrxAmount'         => $this->fees_charged);
 

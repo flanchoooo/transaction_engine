@@ -164,17 +164,17 @@ class WalletW2BController extends Controller
 
             $trust_account = Accounts::find(6);
 
-            $debit_trust_account = array('SerialNo' => '472100',
-                'OurBranchID' => substr($request->account_number, 0, 3),
-                'AccountID' => $trust_account->account_number,
-                'TrxDescriptionID' => '007',
+            $debit_trust_account = array('serial_no' => '472100',
+                'our_branch_id' => substr($request->account_number, 0, 3),
+                'account_id' => $trust_account->account_number,
+                'trx_description_id' => '007',
                 'TrxDescription' => 'Bank to wallet debit trust account',
                 'TrxAmount' => '-' . $amount);
 
-            $credit_client = array('SerialNo' => '472100',
-                'OurBranchID' => substr($request->account_number, 0, 3),
-                'AccountID' => $request->account_number,
-                'TrxDescriptionID' => '008',
+            $credit_client = array('serial_no' => '472100',
+                'our_branch_id' => substr($request->account_number, 0, 3),
+                'account_id' => $request->account_number,
+                'trx_description_id' => '008',
                 'TrxDescription' => "Bank  to wallet credit client wallet",
                 'TrxAmount' => $amount);
 

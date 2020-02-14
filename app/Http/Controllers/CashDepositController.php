@@ -3,6 +3,9 @@ namespace App\Http\Controllers;
 
 
 use App\Accounts;
+use App\Devices;
+use App\Jobs\NotifyBills;
+use App\Merchant;
 use App\Services\BalanceEnquiryService;
 use App\Services\FeesCalculatorService;
 use App\Services\TokenService;
@@ -40,24 +43,24 @@ class CashDepositController extends Controller
             return response()->json(['code' => '99', 'description' => $validator->errors()]);
         }
 
-
+        $merchant_id = Devices::where('imei', $request->imei)->first();
         try {
 
 
             $destination_account_credit = array(
-                'SerialNo'            => '472100',
-                'OurBranchID'         => substr($request->destination_account, 0, 3),
-                'AccountID'           => $request->destination_account,
-                'TrxDescriptionID'    => '007',
+                'serial_no'            => '472100',
+                'our_branch_id'         => substr($request->destination_account, 0, 3),
+                'account_id'           => $request->destination_account,
+                'trx_description_id'    => '007',
                 'TrxDescription'      => 'Cash deposit via POS',
                 'TrxAmount'           => $request->amount / 100);
 
 
             $zimswitch_debit = array(
-                'SerialNo'          => '472100',
-                'OurBranchID'       => substr($request->destination_account, 0, 3),
-                'AccountID'         => $request->source_account,
-                'TrxDescriptionID'  => '008',
+                'serial_no'          => '472100',
+                'our_branch_id'       => substr($request->destination_account, 0, 3),
+                'account_id'         => $request->source_account,
+                'trx_description_id'  => '008',
                 'TrxDescription'    => 'Debit Cash deposit via POS',
                 'TrxAmount'         => - $request->amount / 100);
 
@@ -114,9 +117,24 @@ class CashDepositController extends Controller
                     'description'           => 'Transaction successfully processed.',
                 ]);
 
+            if(isset($request->mobile)) {
+                $new_balance = money_format('$%i', $request->amount / 100);
+                $merchant = Merchant::find($merchant_id->merchant_id);
+                $client = COUNTRY_CODE . substr($request->mobile, 1, 10);
+                dispatch(new NotifyBills(
+                        $client,
+                        "Cash deposit of ZWL $new_balance via Getbucks m-POS was successful. Merchant: $merchant->name, reference: $response->transaction_batch_id",
+                        'GetBucks',
+                        $merchant->mobile,
+                        "Your teller account has been debited ZWL $new_balance. Client mobile: $client reference: $response->transaction_batch_id",
+                        '2'
+                    )
+                );
+            }
+
                 return response([
 
-                    'code' => '100',
+                    'code' => '000',
                     'batch_id' =>"$response->transaction_batch_id",
                     'description' => 'Success'
 

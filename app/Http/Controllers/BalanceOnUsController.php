@@ -3,27 +3,22 @@
 namespace App\Http\Controllers;
 
 
-use App\Accounts;
+
+use App\Deduct;
 use App\Devices;
-use App\Employee;
-use App\Jobs\BalanceEnquiryOnUsJob;
-use App\License;
+use App\Jobs\NotifyBills;
 use App\LuhnCards;
-use App\Services\CheckBalanceService;
+use App\ManageValue;
+use App\Merchant;
 use App\Services\DeductBalanceFeesOnUs;
 use App\Services\FeesCalculatorService;
 use App\Services\TokenService;
 use App\Transactions;
-use App\TransactionType;
 use App\Wallet;
-use App\WalletCOS;
 use App\WalletTransactions;
 use Carbon\Carbon;
-use Exception;
 use GuzzleHttp\Client;
-use GuzzleHttp\Exception\ClientException;
 use GuzzleHttp\Exception\RequestException;
-use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -54,7 +49,7 @@ class BalanceOnUsController extends Controller
              * Declarations
              */
             $card_number = substr($request->card_number, 0, 16);
-            $card_details = LuhnCards::where('track_2', $request->card_number)->get()->first();
+            $card_details = LuhnCards::where('track_1', $card_number)->get()->first();
 
             /*
              * Check employees if the parameter is set.
@@ -80,7 +75,6 @@ class BalanceOnUsController extends Controller
                     $fromAccount = $fromQuery->lockForUpdate()->first();
                     if ($fees_charged['minimum_balance'] > $fromAccount->balance) {
                         WalletTransactions::create([
-
                             'txn_type_id'       => BALANCE_ON_US,
                             'tax'               => '0.00',
                             'revenue_fees'      => '0.00',
@@ -95,8 +89,6 @@ class BalanceOnUsController extends Controller
                             'transaction_status'=> 0,
                             'pan'               => $card_number,
                             'description'       => 'Insufficient funds for mobile:' . $request->account_number,
-
-
                         ]);
 
                         return response([
@@ -110,9 +102,12 @@ class BalanceOnUsController extends Controller
                     $toAccount = $toQuery->lockForUpdate()->first();
                     $toAccount->balance += $amount;
                     $toAccount->save();
+
                     $fromAccount->balance -= $amount;
                     $fromAccount->save();
 
+                    $toAccount->balance -= $amount;
+                    $toAccount->save();
 
                     $source_new_balance             = $fromAccount->balance;
                     $time_stamp                     = Carbon::now()->format('ymdhis');
@@ -136,9 +131,51 @@ class BalanceOnUsController extends Controller
                     $transaction->description       = 'Transaction successfully processed.';
                     $transaction->save();
 
+
+                    $value_management                   = new ManageValue();
+                    $value_management->account_number   = WALLET_REVENUE;
+                    $value_management->amount           = $amount;
+                    $value_management->txn_type         = DESTROY_E_VALUE;
+                    $value_management->state            = 1;
+                    $value_management->initiated_by     = 3;
+                    $value_management->validated_by     = 3;
+                    $value_management->narration        = 'Destroy E-Value';
+                    $value_management->description      = 'Destroy E-Value on balance fee'. $request->account_number. 'reference:'.$reference ;
+                    $value_management->save();
+
+                    //BR Settlement
+                    $auto_deduction = new Deduct();
+                    $auto_deduction->imei = '000';
+                    $auto_deduction->amount = $amount;
+                    $auto_deduction->merchant = HQMERCHANT;
+                    $auto_deduction->source_account = TRUST_ACCOUNT;
+                    $auto_deduction->destination_account = REVENUE;
+                    $auto_deduction->txn_status = 'PENDING';
+                    $auto_deduction->description = 'Wallet Settlement on balance enquiry';
+                    $auto_deduction->save();
+
+
+
                     DB::commit();
 
+
                     $available_balance = number_format((float)$source_new_balance, 2, '', '');
+                    /*$new_balance = money_format('$%i', $source_new_balance);
+
+                    $merchant = Merchant::find($merchant_id->merchant_id)->name;
+
+                   dispatch(new NotifyBills(
+                            $fromAccount->mobile,
+                            "Balance enquiry via Getbucks m-POS was successful, your balance is ZWL $new_balance. Merchant : $merchant",
+                            'eBucks',
+                            '',
+                            '',
+                            '1'
+                        )
+                    );
+
+                 */
+
                     return response([
                         'code'              => '000',
                         'currency'          => CURRENCY,
@@ -151,7 +188,6 @@ class BalanceOnUsController extends Controller
 
                 } catch (\Exception $e) {
                     DB::rollBack();
-
                     WalletTransactions::create([
 
                         'txn_type_id'       => BALANCE_ON_US,
@@ -193,16 +229,23 @@ class BalanceOnUsController extends Controller
              */
 
             if (isset($request->imei)) {
-
                     $merchant_id    = Devices::where('imei', $request->imei)->first();
-                    $balance_result = CheckBalanceService::checkBalance($request->account_number);
+                    $balance_result = $this->checkBalance($request->account_number);
+                     if($balance_result['code'] == '01'){
+                    return response([
+                        'code' => '100',
+                        'description' => 'Invalid BR Account',
+
+                    ]);
+
+                }
 
                     if (isset($balance_result)) {
-                        $fees_result = FeesCalculatorService::calculateFees(
+                         $fees_result = FeesCalculatorService::calculateFees(
                             '0.00',
                             '0.00',
                             BALANCE_ON_US,
-                            $merchant_id->merchant_id
+                            $merchant_id->merchant_id,$request->account_number
                         );
 
 
@@ -238,14 +281,38 @@ class BalanceOnUsController extends Controller
 
 
                     $batch =  DeductBalanceFeesOnUs::deduct($request->account_number, $fees_result['fees_charged'], $merchant_id->merchant_id, $card_number);
+                    if( $batch['code'] != '00'){
+                        return response([
 
+                            'code'=> $batch['code'],
+                            'description'=> $batch['description']
+
+
+                        ]);
+
+                    }
                     $batch_id = $batch['batch'];
-
                     $available_balance_  =   $balance_result['available_balance'] - $fees_result['fees_charged'];
                     $ledger_balance_     =  $balance_result['ledger_balance'] - $fees_result['fees_charged'];
-
                     $available_balance  = round($available_balance_ , 2, PHP_ROUND_HALF_EVEN) * 100;
                     $ledger_balance     = round($ledger_balance_ , 2, PHP_ROUND_HALF_EVEN) * 100;
+
+                    //Send SMS JOB
+
+               /* if(isset($request->mobile)) {
+                    $new_balance = money_format('$%i', $available_balance_);
+                    $merchant = Merchant::find($merchant_id->merchant_id)->name;
+                    dispatch(new NotifyBills(
+                            COUNTRY_CODE . substr($request->mobile, 1, 10),
+                            "Balance enquiry via Getbucks m-POS was successful, your balance is ZWL $new_balance. Merchant : $merchant",
+                            'GetBucks',
+                            '',
+                            '',
+                            '1'
+                        )
+                    );
+               */
+                }
 
                     return response([
 
@@ -257,8 +324,48 @@ class BalanceOnUsController extends Controller
 
                     ]);
 
+            }
+
+    public static function checkBalance($account_number)
+    {
+
+        try
+        {
+
+            $client = new Client();
+            $result = $client->post(env('BASE_URL') . '/api/accounts/balance', [
+
+                'headers' => ['Authorization' => 'BALANCE', 'Content-type' => 'application/json',],
+                'json' => [
+                    'account_number' => $account_number,
+                ]
+            ]);
+
+
+            $balance_response = json_decode($result->getBody()->getContents());
+            return array(
+                'code'              => '00',
+                'available_balance' => $balance_response->available_balance,
+                'ledger_balance'    => $balance_response->available_balance,
+            );
+
+        }catch (RequestException $e) {
+            if ($e->hasResponse()) {
+                $exception = (string)$e->getResponse()->getBody();
+                Log::debug('Account Number:'.$account_number.' '.$exception);
+                return array(
+                    'code'          => '01',
+                    'description'   => 'BR could not process your request.');
 
             }
+            else {
+                Log::debug('Account Number:'.$account_number.' '.$e->getMessage());
+                return array(
+                    'code'          => '01',
+                    'description'   => 'BR could not process your request.');
+
+            }
+        }
 
 
     }

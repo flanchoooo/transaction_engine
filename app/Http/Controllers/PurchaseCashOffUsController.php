@@ -3,9 +3,12 @@ namespace App\Http\Controllers;
 
 
 use App\Accounts;
+use App\PenaltyDeduction;
+use App\Services\AccountInformationService;
 use App\Services\FeesCalculatorService;
 use App\Services\TokenService;
 use App\Transactions;
+use App\WalletTransactions;
 use Carbon\Carbon;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ClientException;
@@ -42,174 +45,140 @@ class PurchaseCashOffUsController extends Controller
         $branch_id = substr($request->account_number, 0, 3);
 
 
+        return response([
+            'code' => '902',
+            'description' => 'Transaction currently unavailable',
+        ]);
         try {
 
+            $results =  AccountInformationService::getUserDetails($request->account_number);
+            if($results["code"] != '00'){
+                return response([
+                    'code' => '100',
+                    'description' => 'Failed to fetch customer information',
+                ]);
+            }
+
+            if($results["status"] != 'Active'){
+                return response([
+                    'code' => '114',
+                    'description' => 'Account closed',
+                ]);
+            }
 
 
-            $authentication = TokenService::getToken();
+            $purchase_amount = $request->amount/100;
+            $cash_amount = $request->cashback_amount/100;
+            $purchase_amounts = $purchase_amount - $cash_amount;
+
+
+            $authentication = $results["token"];
             //Balance Enquiry On Us Debit Fees
-              $fees_charged = FeesCalculatorService::calculateFees(
-                $request->amount / 100,
+                $fees_charged = FeesCalculatorService::calculateFees(
+                    $purchase_amounts,
                 $request->cashback_amount / 100,
                  PURCHASE_CASH_BACK_OFF_US,
-                '28' // configure a default merchant for the HQ,
+                 HQMERCHANT // configure a default merchant for the HQ,
 
             );
 
 
+            $response =   $this->switchLimitChecks(
+                $request->account_number,
+                $request->amount/100 ,
+                $fees_charged['maximum_daily'],
+                $card_number,$fees_charged['transaction_count'],
+                $fees_charged['max_daily_limit']);
 
-            $total_count  = Transactions::where('account_debited',$request->account_number)
-                ->whereIn('txn_type_id',[PURCHASE_CASH_BACK_OFF_US,PURCHASE_CASH_BACK_ON_US,PURCHASE_ON_US,PURCHASE_OFF_US])
-                ->where('description','Transaction successfully processed.')
-                ->whereDate('created_at', Carbon::today())
-                ->get()->count();
-
-
-
-
-
-            if($total_count  >= $fees_charged['transaction_count'] ){
-
-                Transactions::create([
-
-                    'txn_type_id'         => PURCHASE_CASH_BACK_OFF_US,
-                    'tax'                 => '0.00',
-                    'revenue_fees'        => '0.00',
-                    'interchange_fees'    => '0.00',
-                    'zimswitch_fee'       => '0.00',
-                    'transaction_amount'  => '0.00',
-                    'total_debited'       => '0.00',
-                    'total_credited'      => '0.00',
-                    'batch_id'            => '',
-                    'switch_reference'    => '',
-                    'merchant_id'         => '',
-                    'transaction_status'  => 0,
-                    'account_debited'     => $request->br_account,
-                    'pan'                 => '',
-                    'description'         => 'Transaction limit reached for the day.',
-
-
-                ]);
-
-
+            if($response["code"] != '000'){
                 return response([
-                    'code' => '121',
-                    'description' => 'Transaction limit reached for the day.',
-
+                    'code' => $response["code"],
+                    'description' => $response["description"],
                 ]);
             }
 
-
-
-            if($request->amount /100 > $fees_charged['maximum_daily']){
-
-                Transactions::create([
-
-                    'txn_type_id'         => PURCHASE_CASH_BACK_OFF_US,
-                    'tax'                 => '0.00',
-                    'revenue_fees'        => '0.00',
-                    'interchange_fees'    => '0.00',
-                    'zimswitch_fee'       => '0.00',
-                    'transaction_amount'  => '0.00',
-                    'total_debited'       => '0.00',
-                    'total_credited'      => '0.00',
-                    'batch_id'            => '',
-                    'switch_reference'    => '',
-                    'merchant_id'         => '',
-                    'transaction_status'  => 0,
-                    'account_debited'     => $request->account_number,
-                    'pan'                 => $request->card_number,
-                    'description'         => 'Invalid amount, error 902',
-
-
-                ]);
-
-                return response([
-                    'code' => '902',
-                    'description' => 'Invalid mount',
-
-                ]);
-            }
-
-
-            // deductable amt = amount = variable????
-            $deductable_funds = $request->amount / 100 +
-                                $request->cashback_amount / 100 +
-                                $fees_charged['fees_charged'];
-
-            // Check if client has enough funds.
 
 
             $revenue = REVENUE;
             $tax = TAX;
             $zimswitch = ZIMSWITCH;
 
-
-                $zimswitch_amount = $request->amount/100 +
-                                    $request->cashback_amount/100 +
-                                    $fees_charged['zimswitch_fee'] +
-                                    $fees_charged['acquirer_fee']  +
-                                    $fees_charged['cash_back_fee'];
-
-
+           $total_fees =  $fees_charged['fees_charged'] +  $fees_charged['interchange_fee'];
                 $debit_client_amount = array(
-                    'SerialNo'          => '472100',
-                    'OurBranchID'       => substr($request->account_number, 0, 3),
-                    'AccountID'         => $request->account_number,
-                    'TrxDescriptionID'  => '007',
-                    'TrxDescription'    => 'Purchase + Cash off us, debit purchase amount',
-                    'TrxAmount'         => '-'. $request->amount/100);
+                    'serial_no'          => '472100',
+                    'our_branch_id'       => substr($request->account_number, 0, 3),
+                    'account_id'         => $request->account_number,
+                    'trx_description_id'  => '007',
+                    'TrxDescription'    => "POS Purchase + Cash RRN:$request->rrn",
+                    'TrxAmount'         => '-'. $purchase_amount);
 
-                $debit_client_cash_back = array(
-                    'SerialNo'          => '472100',
-                    'OurBranchID'       => substr($request->account_number, 0, 3),
-                    'AccountID'         => $request->account_number,
-                    'TrxDescriptionID'  => '007',
-                    'TrxDescription'    => 'Purchase + Cash off us, debit cash amount',
-                    'TrxAmount'         => '-'. $request->cashback_amount/100);
+
 
 
                 $debit_client_fees = array(
-                    'SerialNo'          => '472100',
-                    'OurBranchID'       => substr($request->account_number, 0, 3),
-                    'AccountID'         => $request->account_number,
-                    'TrxDescriptionID'  => '007',
-                    'TrxDescription'    => 'Purchase + Cash off us, debit fees',
-                    'TrxAmount'         => '-'. $fees_charged['fees_charged']);
+                    'serial_no'          => '472100',
+                    'our_branch_id'       => substr($request->account_number, 0, 3),
+                    'account_id'         => $request->account_number,
+                    'trx_description_id'  => '007',
+                    'TrxDescription'    => "POS Purchase + Cash fees RRN:$request->rrn",
+                    'TrxAmount'         => '-'. $total_fees);
 
 
                 $credit_tax = array(
-                    'SerialNo'          => '472100',
-                    'OurBranchID'       => $branch_id,
-                    'AccountID'         => $tax,
-                    'TrxDescriptionID'  => '008',
-                    'TrxDescription'    => 'Purchase + Cash off us,credit tax',
+                    'serial_no'          => '472100',
+                    'our_branch_id'       => $branch_id,
+                    'account_id'         => $tax,
+                    'trx_description_id'  => '008',
+                    'TrxDescription'    =>"POS Purchase + Cash tax fee RRN:$request->rrn",
                     'TrxAmount'         => $fees_charged['tax']);
 
-                $credit_zimswitch = array(
-                    'SerialNo'          => '472100',
-                    'OurBranchID'       => $branch_id,
-                    'AccountID'         => $zimswitch,
-                    'TrxDescriptionID'  => '008',
-                    'TrxDescription'    => 'Purchase + Cash off us,credit zimswitch ',
-                    'TrxAmount'         => $zimswitch_amount);
-
-                $debit_zimswitch_interchange = array(
-                    'SerialNo'          => '472100',
-                    'OurBranchID'       => $branch_id,
-                    'AccountID'         => $zimswitch,
-                    'TrxDescriptionID'  => '007',
-                    'TrxDescription'    => 'Purchase + Cash off us,debit zimswitch inter change fee',
-                    'TrxAmount'         => '-'.$fees_charged['interchange_fee']);
+                $credit_zimswitch_amount = array(
+                    'serial_no'          => '472100',
+                    'our_branch_id'       => $branch_id,
+                    'account_id'         => $zimswitch,
+                    'trx_description_id'  => '008',
+                    'TrxDescription'    => "POS Purchase + Cash RRN:$request->rrn",
+                    'TrxAmount'         => $purchase_amount);
 
 
-                $credit_revenue = array(
-                    'SerialNo'          => '472100',
-                    'OurBranchID'       => $branch_id,
-                    'AccountID'         => $revenue,
-                    'TrxDescriptionID'  => '008',
-                    'TrxDescription'    => 'Purchase + Cash off us,credit revenue',
+
+            $acquirer_fee = array(
+                'serial_no'          => '472100',
+                'our_branch_id'       => $branch_id,
+                'account_id'         => $revenue,
+                'trx_description_id'  => '008',
+                'TrxDescription'    => "POS Purchase + Cash Acquirer fee RRN:$request->rrn",
+                'TrxAmount'         =>    $fees_charged['acquirer_fee']);
+
+
+            $cash_back_fee = array(
+                'serial_no'          => '472100',
+                'our_branch_id'       => $branch_id,
+                'account_id'         => $zimswitch,
+                'trx_description_id'  => '008',
+                'TrxDescription'    => "Cashback fee RRN:$request->rrn",
+                'TrxAmount'         =>  $fees_charged['cash_back_fee']);
+
+
+            $credit_zimswitch_fee = array(
+                'serial_no'          => '472100',
+                'our_branch_id'       => $branch_id,
+                'account_id'         => $zimswitch,
+                'trx_description_id'  => '007',
+                'TrxDescription'    => "POS Purchase  + Cash Switch fee RRN:$request->rrn",
+                'TrxAmount'         => $fees_charged['zimswitch_fee']);
+
+
+
+            $credit_revenue = array(
+                    'serial_no'          => '472100',
+                    'our_branch_id'       => $branch_id,
+                    'account_id'         => $revenue,
+                    'trx_description_id'  => '008',
+                    'TrxDescription'    => "POS Purchase  + Cash Interchange fee RRN:$request->rrn",
                     'TrxAmount'         => $fees_charged['interchange_fee']);
+
+
 
 
                 $client = new Client();
@@ -221,20 +190,20 @@ class PurchaseCashOffUsController extends Controller
                         'json' => [
                             'bulk_trx_postings' => array(
                                 $debit_client_amount,
-                                $debit_client_cash_back,
                                 $debit_client_fees,
                                 $credit_tax,
-                                $credit_zimswitch,
-                                $debit_zimswitch_interchange,
+                                $credit_zimswitch_amount,
                                 $credit_revenue,
-
-                            ),
+                                $acquirer_fee,
+                                $cash_back_fee,
+                                $credit_zimswitch_fee
+                            )
                         ]
 
                     ]);
 
 
-                    //return $response_ = $result->getBody()->getContents();
+                    //r//eturn $response_ = $result->getBody()->getContents();
                     $response = json_decode($result->getBody()->getContents());
 
                     if($response->description == 'API : Validation Failed: Customer TrxAmount cannot be Greater Than the AvailableBalance') {
@@ -257,6 +226,17 @@ class PurchaseCashOffUsController extends Controller
                             'pan'                 => $card_number,
                             'description'         => 'Insufficient Funds',
 
+
+                        ]);
+
+                        PenaltyDeduction::create([
+                            'amount'                => ZIMSWITCH_PENALTY_FEE,
+                            'imei'                  => '000',
+                            'merchant'              => HQMERCHANT,
+                            'source_account'        => $request->account_number,
+                            'destination_account'   => ZIMSWITCH,
+                            'txn_status'            => 'PENDING',
+                            'description'           => 'Zimswitch Penalty'
 
                         ]);
 
@@ -414,6 +394,223 @@ class PurchaseCashOffUsController extends Controller
                 //return new JsonResponse($e->getMessage(), 503);
             }
         }
+
+
+
+
+    }
+
+    public function switchLimitChecks($account_number,$amount,$maximum_daily,$card_number,$transaction_count,$max_daily_limit){
+
+
+        $account = substr($account_number, 0,3);
+        if($account == '263'){
+            $total_count  = WalletTransactions::where('account_debited',$account_number)
+                ->whereIn('txn_type_id',[PURCHASE_CASH_BACK_ON_US,PURCHASE_OFF_US,PURCHASE_ON_US])
+                ->where('description','Transaction successfully processed.')
+                ->whereDate('created_at', Carbon::today())
+                ->get()->count();
+
+            $daily_spent =  WalletTransactions::where('account_debited', $account_number)
+                ->where('created_at', '>', Carbon::now()->subDays(1))
+                ->sum('transaction_amount');
+
+
+            if($amount > $maximum_daily){
+                WalletTransactions::create([
+                    'txn_type_id'         => PURCHASE_ON_US,
+                    'tax'                 => '0.00',
+                    'revenue_fees'        => '0.00',
+                    'interchange_fees'    => '0.00',
+                    'zimswitch_fee'       => '0.00',
+                    'transaction_amount'  => '0.00',
+                    'total_debited'       => '0.00',
+                    'total_credited'      => '0.00',
+                    'batch_id'            => '',
+                    'switch_reference'    => '',
+                    'merchant_id'         => '',
+                    'transaction_status'  => 0,
+                    'account_debited'     => $account_number,
+                    'pan'                 => $card_number,
+                    'description'         => 'Exceeds maximum purchase limit',
+
+                ]);
+
+                return array(
+                    'code' => '121',
+                    'description' => 'Exceeds maximum purchase limit',
+
+                );
+
+            }
+
+
+            if($total_count  >= $transaction_count ){
+                WalletTransactions::create([
+                    'txn_type_id'         => PURCHASE_ON_US,
+                    'tax'                 => '0.00',
+                    'revenue_fees'        => '0.00',
+                    'interchange_fees'    => '0.00',
+                    'zimswitch_fee'       => '0.00',
+                    'transaction_amount'  => '0.00',
+                    'total_debited'       => '0.00',
+                    'total_credited'      => '0.00',
+                    'batch_id'            => '',
+                    'switch_reference'    => '',
+                    'merchant_id'         => '',
+                    'transaction_status'  => 0,
+                    'account_debited'     => $account_number,
+                    'pan'                 => '',
+                    'description'         => 'Exceeds purchase frequency limit.',
+                ]);
+
+                return array(
+                    'code' => '123',
+                    'description' => 'Exceeds purchase frequency limit.',
+
+                );
+
+            }
+
+            if($daily_spent  >= $max_daily_limit ){
+                WalletTransactions::create([
+                    'txn_type_id'         => PURCHASE_ON_US,
+                    'tax'                 => '0.00',
+                    'revenue_fees'        => '0.00',
+                    'interchange_fees'    => '0.00',
+                    'zimswitch_fee'       => '0.00',
+                    'transaction_amount'  => '0.00',
+                    'total_debited'       => '0.00',
+                    'total_credited'      => '0.00',
+                    'batch_id'            => '',
+                    'switch_reference'    => '',
+                    'merchant_id'         => '',
+                    'transaction_status'  => 0,
+                    'account_debited'     => $account_number,
+                    'pan'                 => '',
+                    'description'         => 'Transaction limit reached for the day.',
+                ]);
+
+                return array(
+                    'code' => '121',
+                    'description' => 'Exceeds purchase frequency limit.',
+
+                );
+            }
+
+
+
+            return array(
+                'code' => '000',
+                'description' => 'Success',
+
+            );
+
+        }
+
+
+        $total_count  = Transactions::where('account_debited',$account_number)
+            ->whereIn('txn_type_id',[PURCHASE_CASH_BACK_ON_US,PURCHASE_OFF_US,PURCHASE_ON_US])
+            ->where('description','Transaction successfully processed.')
+            ->whereDate('created_at', Carbon::today())
+            ->get()->count();
+
+        $daily_spent =  Transactions::where('account_debited', $account_number)
+            ->where('created_at', '>', Carbon::now()->subDays(1))
+            ->sum('transaction_amount');
+
+
+        if($amount > $maximum_daily){
+            Transactions::create([
+                'txn_type_id'         => PURCHASE_ON_US,
+                'tax'                 => '0.00',
+                'revenue_fees'        => '0.00',
+                'interchange_fees'    => '0.00',
+                'zimswitch_fee'       => '0.00',
+                'transaction_amount'  => '0.00',
+                'total_debited'       => '0.00',
+                'total_credited'      => '0.00',
+                'batch_id'            => '',
+                'switch_reference'    => '',
+                'merchant_id'         => '',
+                'transaction_status'  => 0,
+                'account_debited'     => $account_number,
+                'pan'                 => $card_number,
+                'description'         => 'Exceeds maximum purchase limit',
+
+            ]);
+
+            return array(
+                'code' => '121',
+                'description' => 'Exceeds maximum purchase limit',
+
+            );
+
+        }
+
+
+        if($total_count  >= $transaction_count ){
+            Transactions::create([
+                'txn_type_id'         => PURCHASE_ON_US,
+                'tax'                 => '0.00',
+                'revenue_fees'        => '0.00',
+                'interchange_fees'    => '0.00',
+                'zimswitch_fee'       => '0.00',
+                'transaction_amount'  => '0.00',
+                'total_debited'       => '0.00',
+                'total_credited'      => '0.00',
+                'batch_id'            => '',
+                'switch_reference'    => '',
+                'merchant_id'         => '',
+                'transaction_status'  => 0,
+                'account_debited'     => $account_number,
+                'pan'                 => '',
+                'description'         => 'Exceeds purchase frequency limit.',
+            ]);
+
+            return array(
+                'code' => '123',
+                'description' => 'Exceeds purchase frequency limit.',
+
+            );
+
+        }
+
+        if($daily_spent  >= $max_daily_limit ){
+            Transactions::create([
+                'txn_type_id'         => PURCHASE_ON_US,
+                'tax'                 => '0.00',
+                'revenue_fees'        => '0.00',
+                'interchange_fees'    => '0.00',
+                'zimswitch_fee'       => '0.00',
+                'transaction_amount'  => '0.00',
+                'total_debited'       => '0.00',
+                'total_credited'      => '0.00',
+                'batch_id'            => '',
+                'switch_reference'    => '',
+                'merchant_id'         => '',
+                'transaction_status'  => 0,
+                'account_debited'     => $account_number,
+                'pan'                 => '',
+                'description'         => 'Transaction limit reached for the day.',
+            ]);
+
+            return array(
+                'code' => '121',
+                'description' => 'Exceeds purchase frequency limit.',
+
+            );
+        }
+
+
+
+        return array(
+            'code' => '000',
+            'description' => 'Success',
+
+        );
+
+
 
 
 

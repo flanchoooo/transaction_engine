@@ -3,42 +3,31 @@
 namespace App\Jobs;
 use App\License;
 use GuzzleHttp\Client;
+use GuzzleHttp\Exception\ClientException;
 
 class NotifyBills extends Job
 {
-    protected $source;
-    protected $destination;
-    protected $amount_sent;
-    protected $source_balance;
-    protected $destination_balance;
-    protected $reference;
-    protected $product_name;
+
+
+
+    protected $sender_mobile;
+    protected $sender_message;
+    protected $from;
+    protected $r_mobile;
+    protected $r_message;
+    protected $sms_number;
 
 
 
 
-    /**
-     * Create a new job instance.
-     *
-     * @param $transaction_type
-     * @param $status
-     * @param $account
-     * @param $card_number
-     * @param $debit
-     * @param $credit
-     * @param $reference
-     * @param $fee
-     * @param $merchant
-     */
-    public function __construct($source,$destination,$amount_sent,$source_balance,$destination_balance,$reference,$product_name){
+    public function __construct($sender_mobile,$sender_message,$from,$r_mobile,$r_message,$sms_number){
         //
-        $this->source = $source;
-        $this->destination = $destination;
-        $this->amount_sent = $amount_sent;
-        $this->source_balance = $source_balance;
-        $this->destination_balance = $destination_balance;
-        $this->reference = $reference;
-        $this->product_name = $product_name;
+        $this->sender_mobile = $sender_mobile;
+        $this->sender_message = $sender_message;
+        $this->from = $from;
+        $this->r_mobile = $r_mobile;
+        $this->r_message = $r_message;
+        $this->sms_number = $sms_number;
 
     }
 
@@ -49,35 +38,91 @@ class NotifyBills extends Job
      */
     public function handle(){
 
+        if($this->sms_number == '2'){
 
-        $license = License::find(1);
+            try {
 
-        $sender_data = array(
+                $client = new Client();
+                $sender_data = array(
+                    'sender'            => $this->from,
+                    'recipient'        => $this->sender_mobile,
+                    'message'           => $this->sender_message
+                );
 
-            'from' => 'eBucks',
-            'to'   =>  $this->source,
-            'text' => "$this->product_name bill payment of $license->currency $this->amount_sent was successful. New Balance $license->currency $this->source_balance. Ref:$this->reference"
+                $headers = array(
+                    'Accept' => 'application/json',
+                    'application_uid' =>  env('SMS_UUID'),
+                );
 
-        );
+                $result = $client->post(env('SMS_NOTIFY_URL'), [
+                    'headers' => $headers,
+                    'json' => $sender_data,
+                ]);
 
+                $result->getBody()->getContents();
 
-
-        $headers = array(
-            'Accept'        => 'application/json',
-            'Authorization' => 'Basic ' . env('GIKKO_TOKEN'),
-        );
-
-
-        $client = new Client();
-        $result = $client->post(env('GIKKO_URL'), [
-
-            'headers' => $headers,
-            'json' => $sender_data,
-
-        ]);
+            }catch (ClientException $exception){
+                return array('code'=> '01', 'description' => 'Failed to send SMS');
+            }
 
 
-        $result->getBody()->getContents();
+            try {
+
+
+                //Second SMS
+                $clients = new Client();
+                $receipient_data = array(
+                    'sender'        => $this->from,
+                    'recipient'     => $this->r_mobile,
+                    'message'       =>  $this->r_message
+                );
+
+                $headers = array(
+                    'Accept' => 'application/json',
+                    'application_uid' =>  env('SMS_UUID'),
+                );
+
+                $res = $clients->post(env('SMS_NOTIFY_URL'), [
+                    'headers' => $headers,
+                    'json' => $receipient_data,
+                ]);
+
+                $res->getBody()->getContents();
+
+            }catch (ClientException $exception){
+                return array('code'=> '01', 'description' => 'Failed to send SMS');
+            }
+        }
+
+
+        if($this->sms_number == '1'){
+            try {
+
+                $client = new Client();
+                $sender_data = array(
+                    'sender'            => $this->from,
+                    'recipient'         => $this->sender_mobile,
+                    'message'           => $this->sender_message
+                );
+
+
+                $headers = array(
+                    'Accept' => 'application/json',
+                    'application_uid' =>  env('SMS_UUID'),
+                );
+
+                $result = $client->post(env('SMS_NOTIFY_URL'), [
+                    'headers' => $headers,
+                    'json' => $sender_data,
+                ]);
+
+                $result->getBody()->getContents();
+
+            }catch (ClientException $exception){
+                return array('code'=> '01', 'description' => 'Failed to send SMS');
+            }
+
+        }
 
 
 

@@ -3,8 +3,8 @@
 namespace App\Http\Controllers;
 
 
-use App\Accounts;
 use App\Jobs\NotifyBills;
+use App\Jobs\WalletsCashOutJob;
 use App\Services\WalletFeesCalculatorService;
 use App\Wallet;
 use App\WalletCOS;
@@ -21,7 +21,55 @@ class WalletCashOutController extends Controller
 {
 
 
-    public function cash_out(Request $request){
+    public function limit_checker($source_mobile,$wallet_cos_id){
+
+        //Check Daily Spent
+        $daily_spent =  WalletTransactions::where('account_debited',$source_mobile)
+            ->where('created_at', '>', Carbon::now()->subDays(1))
+            ->sum('transaction_amount');
+
+        //Check Monthly Spent
+        $monthly_spent =  WalletTransactions::where('account_debited',$source_mobile)
+            ->where('created_at', '>', Carbon::now()->subDays(30))
+            ->sum('transaction_amount');
+
+
+        $wallet_cos = WalletCOS::find($wallet_cos_id);
+        if($wallet_cos->maximum_daily <  $daily_spent){
+            return response([
+                'code' => '902',
+                'description' => 'Daily limit reached'
+            ]);
+        }
+
+        if($wallet_cos->maximum_monthly <  $monthly_spent){
+            return response([
+                'code' => '902',
+                'description' => 'Monthly limit reached'
+            ]);
+        }
+
+    }
+
+    public function genRandomNumber($length = 10, $formatted = false){
+        $nums = '0123456789';
+
+        // First number shouldn't be zero
+        $out = $nums[ mt_rand(1, strlen($nums) - 1) ];
+
+        // Add random numbers to your string
+        for ($p = 0; $p < $length - 1; $p++)
+            $out .= $nums[ mt_rand(0, strlen($nums) - 1) ];
+
+        // Format the output with commas if needed, otherwise plain output
+        if ($formatted)
+            return number_format($out);
+
+        return $out;
+    }
+
+
+    public function cash_out_(Request $request){
 
         $validator = $this->wallet_send_money($request->all());
         if ($validator->fails()) {
@@ -182,7 +230,22 @@ class WalletCashOutController extends Controller
                     $transaction->save();
                     DB::commit();
 
-                    return response([
+
+            $amount = money_format('$%i',  $request->amount / 100);
+            $commission = money_format('$%i',  $biller_mobile->commissions);
+
+            dispatch(new NotifyBills(
+                    $agent_mobile->mobile,
+                    "Cash-out of ZWL $amount was successful your new balance is  $source_mobile->balance. Reference $reference",
+                    'eBucks',
+                    $agent_mobile->mobile,
+                    "Cash-out of ZWL $amount into mobile $source_mobile->mobile was successful. New Float balance:  ZWL $agent_mobile->balance Commissions balance: ZWL  $commission",
+                    '2'
+                )
+            );
+
+
+            return response([
                         'code' => '000',
                         'batch_id' => "$reference",
                         'description' => 'Success'
@@ -231,6 +294,95 @@ class WalletCashOutController extends Controller
 
     }
 
+    public function cash_out(Request $request){
+
+        $validator = $this->wallet_send_money($request->all());
+        if ($validator->fails()) {
+            return response()->json(['code' => '99', 'description' => $validator->errors()]);
+
+        }
+
+        $source = Wallet::whereMobile($request->source_mobile);
+        $agent = Wallet::whereBusinessCode($request->agent_mobile);
+
+        $biller_mobile = $agent->lockForUpdate()->first();
+        if (!isset($biller_mobile)) {
+            return response([
+                'code' => '01',
+                'description' => 'Agent account is not registered.',
+
+            ]);
+        }
+
+        $source_mobile = $source->lockForUpdate()->first();
+        if (!isset($source_mobile)) {
+            return response([
+                'code' => '01',
+                'description' => 'Source mobile not registered.',
+            ]);
+        }
+
+        if ($source_mobile->state == '0') {
+            return response([
+                'code' => '02',
+                'description' => 'Source account is blocked',
+            ]);
+        }
+
+        if($biller_mobile->id ==  $source_mobile->id){
+            return response([
+                'code' => '01',
+                'description' => 'You cannot perform a cash-out from your own account',
+            ]);
+        }
+
+        $this->limit_checker($source_mobile->mobile,$source_mobile->wallet_cos_id);
+        $transaction_amount = $request->amount/100;
+        $wallet_fees = WalletFeesCalculatorService::calculateFees(
+            $transaction_amount, CASH_OUT
+        );
+
+
+        /*
+         * Bill Payment using Cash
+         */
+        $total_deductions = $transaction_amount + $wallet_fees['fee'];
+        if ($total_deductions > $source_mobile->balance) {
+            return response([
+                'code' => '116',
+                'description' => 'Insufficient funds',
+            ]);
+        }
+
+        $reference = '30'. $this->genRandomNumber();
+        dispatch(new WalletsCashOutJob(
+            $request->source_mobile,
+            $wallet_fees['exclusive_agent_portion'],
+            $wallet_fees['exclusive_revenue_portion'],
+            $request->agent_mobile,
+            WALLET_REVENUE,
+            $transaction_amount,
+            $reference
+
+        ));
+
+
+
+
+        return response([
+            'code' => '000',
+            'batch_id' => "$reference",
+            'description' => 'Success'
+
+        ]);
+
+
+
+
+
+
+    }
+
 
 
 
@@ -239,7 +391,6 @@ class WalletCashOutController extends Controller
         return Validator::make($data, [
             'source_mobile' => 'required',
             'amount' => 'required|integer|min:0',
-            'bill_payment_id' => 'required',
             'agent_mobile' => 'required',
 
 

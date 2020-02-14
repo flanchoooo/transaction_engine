@@ -5,12 +5,15 @@ namespace App\Http\Controllers;
 
 use App\Accounts;
 use App\Devices;
+use App\Jobs\NotifyBills;
 use App\Jobs\ProcessPendingTxns;
 use App\Jobs\SaveTransaction;
+use App\Jobs\WalletCashInJob;
 use App\License;
 use App\Merchant;
 use App\PendingTxn;
 use App\Services\FeesCalculatorService;
+use App\Services\SmsNotificationService;
 use App\Services\TokenService;
 use App\Services\WalletFeesCalculatorService;
 use App\Transaction;
@@ -107,15 +110,13 @@ class WalletCashInController extends Controller
     }
 
 
-    public function cash_in(Request $request){
+    public function cash_in_(Request $request){
 
         $validator = $this->cash_in_validator($request->all());
         if ($validator->fails()) {
             return response()->json(['code' => '99', 'description' => $validator->errors()]);
 
         }
-
-
 
 
         DB::beginTransaction();
@@ -133,10 +134,8 @@ class WalletCashInController extends Controller
 
             );
 
-
             $total_deductions = $wallet_fees['fee'];
-
-             $agent_mobile = $agent_account->lockForUpdate()->first();
+            $agent_mobile = $agent_account->lockForUpdate()->first();
             if ($amount_in_cents > $agent_mobile->balance) {
                 WalletTransactions::create([
 
@@ -195,6 +194,7 @@ class WalletCashInController extends Controller
 
 
 
+
             //Fee Deductions.
             $revenue_mobile->balance -=  $wallet_fees['fee'];
             $revenue_mobile->save();
@@ -248,6 +248,22 @@ class WalletCashInController extends Controller
             $transaction->save();
 
 
+            $amount = money_format('$%i',  $request->amount / 100);
+            $commission = money_format('$%i',  $agent_mobile->commissions);
+
+            dispatch(new NotifyBills(
+                    $receiving_wallet->mobile,
+                    "Cash-in of ZWL $amount was successful your new balance is  $receiving_wallet->balance. Reference $reference",
+                    'eBucks',
+                    $agent_mobile->mobile,
+                    "Cash-in of ZWL $amount into mobile $receiving_wallet->mobile was successful. New Float balance:  ZWL $agent_mobile->balance Commissions balance: ZWL  $commission",
+                    '2'
+                )
+            );
+
+
+
+
             DB::commit();
 
             return response([
@@ -262,10 +278,150 @@ class WalletCashInController extends Controller
 
         } catch (\Exception $e) {
 
-          //  return $e;
+            //  return $e;
             DB::rollBack();
             Log::debug('Account Number:'.$request->account_number.' '. $e);
 
+            WalletTransactions::create([
+
+                'txn_type_id'       => CASH_IN,
+                'tax'               => '0.00',
+                'revenue_fees'      => '0.00',
+                'interchange_fees'  => '0.00',
+                'zimswitch_fee'     => '0.00',
+                'transaction_amount'=> '0.00',
+                'total_debited'     => '0.00',
+                'total_credited'    => '0.00',
+                'batch_id'          => '',
+                'switch_reference'  => '',
+                'merchant_id'       => '',
+                'transaction_status'=> 0,
+                'pan'               => '',
+                'description'       => 'Transaction was reversed for mobbile:' . $request->account_number,
+
+
+            ]);
+
+
+
+        }
+
+
+
+    }
+
+    public function cash_in(Request $request){
+
+        $validator = $this->cash_in_validator($request->all());
+        if ($validator->fails()) {
+            return response()->json(['code' => '99', 'description' => $validator->errors()]);
+
+        }
+
+
+
+        DB::beginTransaction();
+        try {
+
+
+            $agent_account   = Wallet::whereMobile($request->source_mobile);
+            $revenue_account     = Wallet::whereMobile(WALLET_CASH_IN_REVENUE);
+
+            $amount_in_cents =  $request->amount / 100;
+            $wallet_fees = WalletFeesCalculatorService::calculateFees(
+                $amount_in_cents, CASH_IN
+
+            );
+
+            $total_deductions = $wallet_fees['fee'];
+            $agent_mobile = $agent_account->lockForUpdate()->first();
+            if ($amount_in_cents > $agent_mobile->balance) {
+                WalletTransactions::create([
+                    'txn_type_id'       => CASH_IN,
+                    'tax'               => '0.00',
+                    'revenue_fees'      => '0.00',
+                    'interchange_fees'  => '0.00',
+                    'zimswitch_fee'     => '0.00',
+                    'transaction_amount'=> '0.00',
+                    'total_debited'     => '0.00',
+                    'total_credited'    => '0.00',
+                    'batch_id'          => '',
+                    'switch_reference'  => '',
+                    'merchant_id'       => '',
+                    'transaction_status'=> 0,
+                    'pan'               => '',
+                    'description'       => 'Agent: Insufficient funds for mobile:' .$request->source_mobile,
+                ]);
+
+                return response([
+                    'code' => '116',
+                    'description' => 'Agent:Insufficient funds',
+                ]);
+            }
+
+
+            if($agent_mobile->mobile ==  $request->destination_mobile){
+                return response([
+
+                    'code' => '07',
+                    'description' => 'Invalid transaction',
+
+                ]);
+
+            }
+
+            $revenue_mobile = $revenue_account->lockForUpdate()->first();
+            if ($total_deductions > $revenue_mobile->balance) {
+                WalletTransactions::create([
+                    'txn_type_id'       => CASH_IN,
+                    'tax'               => '0.00',
+                    'revenue_fees'      => '0.00',
+                    'interchange_fees'  => '0.00',
+                    'zimswitch_fee'     => '0.00',
+                    'transaction_amount'=> '0.00',
+                    'total_debited'     => '0.00',
+                    'total_credited'    => '0.00',
+                    'batch_id'          => '',
+                    'switch_reference'  => '',
+                    'merchant_id'       => '',
+                    'transaction_status'=> 0,
+                    'pan'               => '',
+                    'description'       => 'Revenue:Insufficient funds for mobile:' . $request->account_number,
+
+
+                ]);
+
+                return response([
+                    'code' => '116',
+                    'description' => 'Revenue account has Insufficient funds',
+                ]);
+            }
+
+            $reference                      = '20'.$this->genRandomNumber();
+            dispatch(new WalletCashInJob(
+                $request->source_mobile,
+                WALLET_CASH_IN_REVENUE,
+                $request->destination_mobile,
+                $amount_in_cents,
+                $wallet_fees['fee'],
+                $reference
+            ));
+
+            DB::commit();
+
+            return response([
+
+                'code'          => '000',
+                'batch_id'      => "$reference",
+                'description'   => 'Success'
+
+
+            ]);
+
+
+        } catch (\Exception $e) {
+
+            DB::rollBack();
             WalletTransactions::create([
 
                 'txn_type_id'       => CASH_IN,
@@ -302,6 +458,24 @@ class WalletCashInController extends Controller
         //Declarations
 
     }
+
+    public function genRandomNumber($length = 10, $formatted = false){
+        $nums = '0123456789';
+
+        // First number shouldn't be zero
+        $out = $nums[ mt_rand(1, strlen($nums) - 1) ];
+
+        // Add random numbers to your string
+        for ($p = 0; $p < $length - 1; $p++)
+            $out .= $nums[ mt_rand(0, strlen($nums) - 1) ];
+
+        // Format the output with commas if needed, otherwise plain output
+        if ($formatted)
+            return number_format($out);
+
+        return $out;
+    }
+
 
     protected function cash_in_preauth_validator(Array $data)
     {

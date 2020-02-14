@@ -18,7 +18,6 @@ class Zipit extends Model implements Authenticatable
     use AuthenticableTrait;
 
     protected $guarded = [];
-
     protected $table = 'zipit';
 
 }

@@ -121,18 +121,18 @@ class PostWalleBalanceEnqJob extends Job
 
 
         //BR Transactions
-        $debit_trust_purchase = array('SerialNo' => '472100',
-            'OurBranchID' => '001',
-            'AccountID' => $trust_account->account_number,
-            'TrxDescriptionID' => '007',
+        $debit_trust_purchase = array('serial_no' => '472100',
+            'our_branch_id' => '001',
+            'account_id' => $trust_account->account_number,
+            'trx_description_id' => '007',
             'TrxDescription' => 'Debit Trust Account with zimswitch fees'.$post_txns->batch_id,
             'TrxAmount' => '-' . $post_txns->zimswitch_fees);
 
 
-        $credit_zimswitch_fee = array('SerialNo' => '472100',
-            'OurBranchID' => '001',
-            'AccountID' => $zimswitch->account_number,
-            'TrxDescriptionID' => '008',
+        $credit_zimswitch_fee = array('serial_no' => '472100',
+            'our_branch_id' => '001',
+            'account_id' => $zimswitch->account_number,
+            'trx_description_id' => '008',
             'TrxDescription' => 'Credit Zimswitch with fees'.$post_txns->batch_id,
             'TrxAmount' => $post_txns->zimswitch_fees);
 

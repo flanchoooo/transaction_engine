@@ -26,9 +26,6 @@ $router->get('/', function () use ($router) {
 |
 */
 
-$router->post('/login', 'LoginController@index');
-$router->post('/register', 'UserController@register');
-$router->get('/loaderio-8cac7463ae09a319247f053ee1fb3acd/', 'UserController@tester');
 
 
 /*
@@ -51,7 +48,9 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
 
     //Purchase
     $app->post('purchase',  'PurchaseOnUsController@purchase');
+    $app->get('mdr',  'PurchaseOnUsController@mdr');
     $app->post('purchase_off_us',  'PurchaseOffUsController@purchase_off_us');
+    $app->post('purchase_off_us_copy',  'PurchaseOffUsController@purchase_off_us_copy');
 
     //Banking
     $app->post('cash_withdrawal',  'WithdrawalOnUsController@cash_withdrawal');
@@ -59,7 +58,7 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
 
 
     //Sale + Cash
-    $app->post('purchase_cashback',  'PurchaseCashOnUsController@purchase_cashback');
+    $app->post('purchase_cash_back',  'PurchaseCashOnUsController@purchase_cashback');
     $app->post('purchase_cash_back_off_us',  'PurchaseCashOffUsController@purchase_cash_back_off_us');
 
 
@@ -83,10 +82,8 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
     $app->post('customer_info',  'DepositController@info');
     $app->post('deposit',  'DepositController@deposit'); // Refactored
     $app->post('withdrawal',  'WithdrawalController@withdrawal');// Refactored
-     // Refactored
+    // Refactored
     $app->post('launch',  'LaunchController@index'); // Refactored
-
-
 
     //Wallet Support
     $app->post('adjustment_preauth',  'WalletAdjustmentsController@adjustment_preauth');
@@ -96,6 +93,7 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
 
     //Wallet
     $app->post('wallet_sign_up',  'WalletController@wallet_sign_up');
+    $app->post('wallet_agent_sign_up',  'WalletController@wallet_agent_sign_up');
     $app->post('send_money_preauth',  'WalletSendMoneyController@send_money_preauth');
     $app->post('send_money',  'WalletSendMoneyController@send_money');
 
@@ -104,6 +102,11 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
 
     //Wallet supporting APIs
     $app->post('history',  'WalletSupportController@history');
+    $app->post('history_web',  'WalletSupportController@history_web');
+    $app->post('customer_info',  'WalletSupportController@customer_info');
+    $app->post('settle',  'WalletSupportController@settle_agent');
+    $app->post('agent',  'WalletSupportController@agent');
+    $app->post('agent_history',  'WalletSupportController@agent_history');
 
     // Wallet Balance
     $app->post('balance_request',  'WalletBalanceController@balance_request');
@@ -133,6 +136,8 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
     $app->post('bulk_upload',  'WalletDisbursementsController@bulk_upload');
     $app->post('disburse',  'WalletDisbursementsController@disburse');
     $app->get('/disburse/all',  'WalletDisbursementsController@all');
+    $app->get('/disburse/cancel',  'WalletDisbursementsController@cancel');
+    $app->get('/disburse/reports',  'WalletDisbursementsController@reports');
 
 
 

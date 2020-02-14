@@ -131,18 +131,18 @@ class PostWalletPurchaseJob extends Job
 
 
         $debit_trust_purchase = array(
-            'SerialNo' => '472100',
-            'OurBranchID' => '001',
-            'AccountID' => $trust_account->account_number,
-            'TrxDescriptionID' => '007',
+            'serial_no' => '472100',
+            'our_branch_id' => '001',
+            'account_id' => $trust_account->account_number,
+            'trx_description_id' => '007',
             'TrxDescription' => 'Debit Trust Account purchase amount'.$post_txns->batch_id,
             'TrxAmount' => '-' . $post_txns->purchase_amount);
 
         $debit_trust_fees = array(
-            'SerialNo' => '472100',
-            'OurBranchID' => '001',
-            'AccountID' => $trust_account->account_number,
-            'TrxDescriptionID' => '007',
+            'serial_no' => '472100',
+            'our_branch_id' => '001',
+            'account_id' => $trust_account->account_number,
+            'trx_description_id' => '007',
             'TrxDescription' => 'Debit Trust Account zimswitch fee'.$post_txns->batch_id,
             'TrxAmount' => '-' .  $post_txns->zimswitch_fees);
 
@@ -150,20 +150,20 @@ class PostWalletPurchaseJob extends Job
 
 
         $credit_zimswitch_fee = array(
-            'SerialNo' => '472100',
-            'OurBranchID' => '001',
-            'AccountID' => $zimswitch->account_number,
-            'TrxDescriptionID' => '008',
+            'serial_no' => '472100',
+            'our_branch_id' => '001',
+            'account_id' => $zimswitch->account_number,
+            'trx_description_id' => '008',
             'TrxDescription' => 'Credit Zimswitch with fees'.$post_txns->batch_id,
             'TrxAmount' => $post_txns->zimswitch_fees);
 
 
 
 
-        $credit_zimswitch_purchase = array('SerialNo' => '472100',
-            'OurBranchID' => '001',
-            'AccountID' => $zimswitch->account_number,
-            'TrxDescriptionID' => '008',
+        $credit_zimswitch_purchase = array('serial_no' => '472100',
+            'our_branch_id' => '001',
+            'account_id' => $zimswitch->account_number,
+            'trx_description_id' => '008',
             'TrxDescription' => 'Credit Zimswitch with purchase amount'.$post_txns->batch_id,
             'TrxAmount' => $post_txns->purchase_amount);
 

@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Accounts;
 use App\Devices;
 use App\Employee;
+use App\Jobs\NotifyBills;
 use App\Jobs\PostWalletPurchaseJob;
 use App\LuhnCards;
+use App\Merchant;
 use App\MerchantAccount;
 use App\Services\BalanceEnquiryService;
 use App\Services\FeesCalculatorService;
@@ -44,6 +46,8 @@ class WithdrawalOnUsController extends Controller
         if ($validator->fails()) {
             return response()->json(['code' => '99', 'description' => $validator->errors()]);
         }
+
+        $merchant_id = Devices::where('imei', $request->imei)->first();
 
 
         try {
@@ -145,36 +149,36 @@ class WithdrawalOnUsController extends Controller
 
 
             $credit_merchant_account = array(
-                'SerialNo' => '472100',
-                'OurBranchID' => $branch_id,
-                'AccountID' => $request->destination_account,
-                'TrxDescriptionID' => '008',
+                'serial_no' => '472100',
+                'our_branch_id' => $branch_id,
+                'account_id' => $request->destination_account,
+                'trx_description_id' => '008',
                 'TrxDescription' => 'Credit GL, Withdrawal via POS',
                 'TrxAmount' => $request->amount / 100);
 
             $debit_client_amount = array(
-                'SerialNo' => '472100',
-                'OurBranchID' => $branch_id,
-                'AccountID' => $request->source_account,
-                'TrxDescriptionID' => '007',
+                'serial_no' => '472100',
+                'our_branch_id' => $branch_id,
+                'account_id' => $request->source_account,
+                'trx_description_id' => '007',
                 'TrxDescription' => 'Withdrawal via POS',
                 'TrxAmount' => '-' . $request->amount / 100);
 
 
             $debit_client_fees = array(
-                'SerialNo' => '472100',
-                'OurBranchID' => $branch_id,
-                'AccountID' => $request->source_account,
-                'TrxDescriptionID' => '007',
+                'serial_no' => '472100',
+                'our_branch_id' => $branch_id,
+                'account_id' => $request->source_account,
+                'trx_description_id' => '007',
                 'TrxDescription' => 'Withdrawal fees charged',
                 'TrxAmount' => '-' . $fees_charged['acquirer_fee']);
 
 
             $credit_revenue_fees = array(
-                'SerialNo' => '472100',
-                'OurBranchID' => '001',
-                'AccountID' => $revenue,
-                'TrxDescriptionID' => '008',
+                'serial_no' => '472100',
+                'our_branch_id' => '001',
+                'account_id' => $revenue,
+                'trx_description_id' => '008',
                 'TrxDescription' => "Withdrawal fees earned",
                 'TrxAmount' => $fees_charged['acquirer_fee']);
 
@@ -262,6 +266,21 @@ class WithdrawalOnUsController extends Controller
                     'description' => 'Transaction successfully processed.',
 
                 ]);
+
+            if(isset($request->mobile)) {
+                $new_balance = money_format('$%i', $request->amount / 100);
+                $merchant = Merchant::find($merchant_id->merchant_id);
+                $client = COUNTRY_CODE . substr($request->mobile, 1, 10);
+                dispatch(new NotifyBills(
+                        $client,
+                        "Cash withdrawal of ZWL $new_balance via Getbucks m-POS was successful. Merchant: $merchant->name, reference: $response->transaction_batch_id",
+                        'GetBucks',
+                        $merchant->mobile,
+                        "Your teller account has been credited ZWL $new_balance. Client mobile: $client reference: $response->transaction_batch_id",
+                        '2'
+                    )
+                );
+            }
 
 
                 return response([

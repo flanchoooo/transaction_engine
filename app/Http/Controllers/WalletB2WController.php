@@ -172,31 +172,31 @@ class WalletB2WController extends Controller
             $revenue = Accounts::find(2);
             $bank_to_wallet_gl_acc = Accounts::find(7);
 
-            $debit_client = array('SerialNo' => '472100',
-                'OurBranchID' => substr($request->account_number, 0, 3),
-                'AccountID' => $request->account_number,
-                'TrxDescriptionID' => '007',
+            $debit_client = array('serial_no' => '472100',
+                'our_branch_id' => substr($request->account_number, 0, 3),
+                'account_id' => $request->account_number,
+                'trx_description_id' => '007',
                 'TrxDescription' => 'Bank to wallet debit client',
                 'TrxAmount' => '-' . $total_deductions);
 
-            $credit_revenue = array('SerialNo' => '472100',
-                'OurBranchID' => substr($request->account_number, 0, 3),
-                'AccountID' => $revenue->account_number,
-                'TrxDescriptionID' => '008',
+            $credit_revenue = array('serial_no' => '472100',
+                'our_branch_id' => substr($request->account_number, 0, 3),
+                'account_id' => $revenue->account_number,
+                'trx_description_id' => '008',
                 'TrxDescription' => "Bank to wallet credit revenue",
                 'TrxAmount' => $fees_charged['acquirer_fee']);
 
-            $credit_tax = array('SerialNo' => '472100',
-                'OurBranchID' => substr($request->account_number, 0, 3),
-                'AccountID' => $tax->account_number,
-                'TrxDescriptionID' => '008',
+            $credit_tax = array('serial_no' => '472100',
+                'our_branch_id' => substr($request->account_number, 0, 3),
+                'account_id' => $tax->account_number,
+                'trx_description_id' => '008',
                 'TrxDescription' => "Bank to wallet credit tax",
                 'TrxAmount' => $fees_charged['tax']);
 
-            $credit_destionation_gl = array('SerialNo' => '472100',
-                'OurBranchID' => substr($request->account_number, 0, 3),
-                'AccountID' => $bank_to_wallet_gl_acc->account_number,
-                'TrxDescriptionID' => '008',
+            $credit_destionation_gl = array('serial_no' => '472100',
+                'our_branch_id' => substr($request->account_number, 0, 3),
+                'account_id' => $bank_to_wallet_gl_acc->account_number,
+                'trx_description_id' => '008',
                 'TrxDescription' => "Bank to wallet credit destination gl",
                 'TrxAmount' => $request->amount/100 );
 

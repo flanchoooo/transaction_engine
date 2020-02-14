@@ -22,23 +22,21 @@ class DeductBalanceFeesOnUs
     {
 
         $branch_id = substr($account_number, 0, 3);
-        $authentication  = TokenService::getToken();
-
         $account_debit = array(
-            'SerialNo'          => '472100',
-            'OurBranchID'       => $branch_id,
-            'AccountID'         => $account_number,
-            'TrxDescriptionID'  => '007',
-            'TrxDescription'    => 'Balance enquiry on us,debit fees',
-            'TrxAmount'         => '-' . $fees_charged);
+            'serial_no'          => '472100',
+            'our_branch_id'       => $branch_id,
+            'account_id'         => $account_number,
+            'trx_description_id'  => '007',
+            'trx_description'    => 'Balance enquiry',
+            'trx_amount'         => '-' . $fees_charged);
 
         $bank_revenue_credit    = array(
-            'SerialNo'          => '472100',
-            'OurBranchID'       => $branch_id,
-            'AccountID'         => REVENUE,
-            'TrxDescriptionID'  => '008',
-            'TrxDescription'    => "Balance enquiry on us,credit revenue with fees",
-            'TrxAmount'         => $fees_charged);
+            'serial_no'          => '472100',
+            'our_branch_id'       => $branch_id,
+            'account_id'         => REVENUE,
+            'trx_description_id'  => '008',
+            'trx_description'    => "Balance enquiry on us,credit revenue with fees",
+            'trx_amount'         => $fees_charged);
 
 
         $client = new Client();
@@ -46,7 +44,7 @@ class DeductBalanceFeesOnUs
         try {
             $result = $client->post(env('BASE_URL') . '/api/internal-transfer', [
 
-                'headers' => ['Authorization' => $authentication, 'Content-type' => 'application/json',],
+                'headers' => ['Authorization' => 'Deduct', 'Content-type' => 'application/json',],
                 'json' => [
                     'bulk_trx_postings' => array(
                         $account_debit,
@@ -85,9 +83,7 @@ class DeductBalanceFeesOnUs
         }catch (RequestException $e) {
             if ($e->hasResponse()) {
                 $exception = (string)$e->getResponse()->getBody();
-
                 Log::debug('Account Number:'.$account_number.' '.$exception);
-
                 Transactions::create([
 
                     'txn_type_id'       => BALANCE_ON_US,

@@ -24,8 +24,7 @@ class CheckBalanceService
         {
 
 
-        $authentication  = TokenService::getToken();
-
+        $authentication  = 'Test';
         $client = new Client();
         $result = $client->post(env('BASE_URL') . '/api/accounts/balance', [
 
@@ -42,6 +41,7 @@ class CheckBalanceService
                 'code'              => '00',
                 'available_balance' => $balance_response->available_balance,
                 'ledger_balance'    => $balance_response->available_balance,
+                'token'              => $authentication,
 
         );
 
@@ -56,7 +56,7 @@ class CheckBalanceService
                 Log::debug('Account Number:'.$account_number.' '.$exception);
 
                 return array(
-                    'code'          => '01',
+                    'code'          => '100',
                     'description'   => 'BR could not process your request.');
 
         }
@@ -67,7 +67,7 @@ class CheckBalanceService
             Log::debug('Account Number:'.$account_number.' '.$e->getMessage());
 
             return array(
-                'code'          => '01',
+                'code'          => '100',
                 'description'   => 'BR could not process your request.');
 
         }

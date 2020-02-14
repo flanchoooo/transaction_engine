@@ -261,8 +261,19 @@ class WalletDisbursementsController  extends Controller
     }
 
     public function all (){
-        $disburse = WalletDisbursements::all();
+        $disburse = WalletDisbursements::where('transaction_status', '1')->get();
         return response($disburse);
+    }
+
+    public function reports (){
+        $disburse = WalletDisbursements::where('description','Disbursement successfully processed')->get();
+        return response($disburse);
+    }
+
+    public function cancel (){
+
+        $disburse = WalletDisbursements::where('transaction_status','1')->delete();
+
     }
 
     protected function disbursement_validator(Array $data){
@@ -270,6 +281,7 @@ class WalletDisbursementsController  extends Controller
             'validator'             => 'required',
         ]);
     }
+
     protected function bulk_upload_validator(Array $data){
         return Validator::make($data, [
             'source_account'        => 'required',

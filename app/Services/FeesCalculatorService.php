@@ -15,11 +15,11 @@ use App\Merchant;
 
 class FeesCalculatorService
 {
-    public static function calculateFees($amount, $cash_back_amount, $transaction_type, $merchant_id){
+    public static function calculateFees($amount,$cash_back_amount,$transaction_type,$merchant_id,$account){
 
 
 
-       $fee = Fee::where('transaction_type_id', $transaction_type)
+        $fee = Fee::where('transaction_type_id', $transaction_type)
             ->where('minimum_daily', '<=', $amount)
             ->where('maximum_daily', '>=', $amount)
             ->first();
@@ -107,8 +107,60 @@ class FeesCalculatorService
 
         }
 
+        $account_class = substr($account, 3, 3);
+        if ($account_class == '201') {
+            return array(
+                'fees_charged'          => $fees_charged - $acquirer_fee,
+                'zimswitch_fee'         => $zimswitch_fee,
+                'interchange_fee'       => $interchange_fee,
+                'acquirer_fee'          => 0,
+                'cash_back_fee'         => $cash_back_fee,
+                'tax'                   => $tax,
+                'mdr'                   => $merchant_service_commission,
+                'maximum_daily'         => $fee->maximum_daily,
+                'transaction_count'     => $fee->transaction_count,
+                'minimum_balance'       => 0,
+                'max_daily_limit'       => $fee->max_daily_limit,
 
-        //return $cash_back_fee;
+            );
+        }
+
+
+        if ($account_class == '202') {
+            return array(
+                'fees_charged'          => $fees_charged,
+                'zimswitch_fee'         => $zimswitch_fee,
+                'interchange_fee'       => $interchange_fee,
+                'acquirer_fee'          => $acquirer_fee,
+                'cash_back_fee'         => $cash_back_fee,
+                'tax'                   => $tax,
+                'mdr'                   => $merchant_service_commission,
+                'maximum_daily'         => $fee->maximum_daily,
+                'transaction_count'     => $fee->transaction_count,
+                'minimum_balance'       => 30,
+                'max_daily_limit'       => $fee->max_daily_limit,
+
+            );
+        }
+
+
+        if ($account_class == '204') {
+            return array(
+                'fees_charged'          => $fees_charged,
+                'zimswitch_fee'         => $zimswitch_fee,
+                'interchange_fee'       => $interchange_fee,
+                'acquirer_fee'          => $acquirer_fee,
+                'cash_back_fee'         => $cash_back_fee,
+                'tax'                   => $tax,
+                'mdr'                   => $merchant_service_commission,
+                'maximum_daily'         => $fee->maximum_daily,
+                'transaction_count'     => $fee->transaction_count,
+                'minimum_balance'       => 20,
+                'max_daily_limit'       => $fee->max_daily_limit,
+
+            );
+        }
+
 
         return array(
             'fees_charged'          => $fees_charged,
@@ -120,7 +172,8 @@ class FeesCalculatorService
             'mdr'                   => $merchant_service_commission,
             'maximum_daily'         => $fee->maximum_daily,
             'transaction_count'     => $fee->transaction_count,
-            'minimum_balance'       => $fee->minimum_balance,
+            'minimum_balance'       => 30,
+            'max_daily_limit'       => $fee->max_daily_limit,
 
         );
 

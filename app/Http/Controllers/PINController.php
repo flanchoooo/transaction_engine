@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Devices;
 use App\Services\BalanceEnquiryService;
-use App\Services\CardCheckerService;
+use App\Services\SmsNotificationService;
 use App\Services\CheckBalanceService;
 use App\Services\FeesCalculatorService;
 use App\Services\TokenService;
@@ -61,7 +61,7 @@ class PINController extends Controller
                 }
 
 
-               $request_s =  strlen(CardCheckerService::checkCard($request->card_number));
+               $request_s =  strlen(SmsNotificationService::checkCard($request->card_number));
 
                 if($request_s > 2){
 
@@ -69,7 +69,7 @@ class PINController extends Controller
 
                 }else{
 
-                    $request_s =  CardCheckerService::checkCard($request->card_number);
+                    $request_s =  SmsNotificationService::checkCard($request->card_number);
 
                     return response(['code'=> $request_s ]);
                 }

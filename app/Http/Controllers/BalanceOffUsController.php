@@ -4,11 +4,24 @@ namespace App\Http\Controllers;
 
 
 use App\Accounts;
+use App\BRAccountID;
+use App\BRJob;
+use App\Deduct;
 use App\Devices;
 use App\Employee;
+use App\Jobs\BalanceJob;
+use App\Jobs\NotifyBills;
+use App\Jobs\PurchaseJob;
 use App\License;
 use App\LuhnCards;
+use App\ManageValue;
+use App\MDR;
+use App\Merchant;
+use App\PenaltyDeduction;
+use App\PendingTxn;
+use App\Services\AccountInformationService;
 use App\Services\FeesCalculatorService;
+use App\Services\LoggingService;
 use App\Services\TokenService;
 use App\Transactions;
 use App\TransactionType;
@@ -19,6 +32,7 @@ use Carbon\Carbon;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ClientException;
 use GuzzleHttp\Exception\RequestException;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -39,33 +53,26 @@ class BalanceOffUsController extends Controller
      */
 
 
-    public function balance_off_us(Request $request){
 
+
+    public function balance_off_us(Request $request){
         $validator = $this->balance_enquiry_off_us($request->all());
         if ($validator->fails()) {
             return response()->json(['code' => '99', 'description' => $validator->errors()]);
         }
 
 
-        $card_details = LuhnCards::where('track_2', $request->card_number)->get()->first();
         $card_number = substr($request->card_number, 0, 16);
-        $branch_id = substr($request->account_number, 0, 3);
+        $card_details = LuhnCards::where('track_1', $card_number)->get()->first();
         $currency = CURRENCY;
 
-
-
         if (isset($card_details->wallet_id)) {
-
-
             DB::beginTransaction();
             try {
 
                 $fromQuery = Wallet::whereId($card_details->wallet_id);
-                $toQuery = Wallet::whereMobile(ZIMSWITCH_WALLET_MOBILE);
-
-
-
-                  $fees_charged = FeesCalculatorService::calculateFees(
+                $reference                      = $this->genRandomNumber();
+                $fees_charged = FeesCalculatorService::calculateFees(
                     '0.00',
                     '0.00',
                     BALANCE_ENQUIRY_OFF_US,
@@ -74,6 +81,28 @@ class BalanceOffUsController extends Controller
                 );
 
                 $fromAccount = $fromQuery->lockForUpdate()->first();
+                if($fromAccount->balance == 0){
+                    $available_balance = number_format((float)$fromAccount->balance, 2, '', '');
+                    return response([
+                        'code'              => '000',
+                        'currency'          => CURRENCY,
+                        'available_balance' => $available_balance,
+                        'ledger_balance'    => $available_balance,
+                        'batch_id'          => "$reference",
+
+                    ]);
+
+                }
+
+                if($fromAccount->state == '0') {
+                    return response([
+                        'code' => '114',
+                        'description' => 'Source account is closed',
+
+                    ]);
+                }
+
+
                 if ($fees_charged['minimum_balance'] > $fromAccount->balance) {
                     WalletTransactions::create([
 
@@ -102,17 +131,12 @@ class BalanceOffUsController extends Controller
                 }
 
                 //Fee Deductions.
-                 $amount = $fees_charged['zimswitch_fee'];
-                $toAccount = $toQuery->lockForUpdate()->first();
-                $toAccount->balance += $amount;
-                $toAccount->save();
+                $amount = $fees_charged['zimswitch_fee'];
                 $fromAccount->balance -= $amount;
                 $fromAccount->save();
 
 
                 $source_new_balance             = $fromAccount->balance;
-                $time_stamp                     = Carbon::now()->format('ymdhis');
-                $reference                      = '18' . $time_stamp;
                 $transaction                    = new WalletTransactions();
                 $transaction->txn_type_id       = BALANCE_ENQUIRY_OFF_US;
                 $transaction->tax               = '0.00';
@@ -132,9 +156,33 @@ class BalanceOffUsController extends Controller
                 $transaction->description       = 'Transaction successfully processed.';
                 $transaction->save();
 
+                $value_management                   = new ManageValue();
+                $value_management->account_number   = WALLET_REVENUE;
+                $value_management->amount           = $amount;
+                $value_management->txn_type         = DESTROY_E_VALUE;
+                $value_management->state            = 1;
+                $value_management->initiated_by     = 3;
+                $value_management->validated_by     = 3;
+                $value_management->narration        = 'Destroy E-Value';
+                $value_management->description      = 'Destroy E-Value on balance fee'. $request->account_number. 'reference:'.$reference ;
+                $value_management->save();
+
+                //BR Settlement
+                $auto_deduction = new Deduct();
+                $auto_deduction->imei = '000';
+                $auto_deduction->amount = $amount;
+                $auto_deduction->merchant = HQMERCHANT;
+                $auto_deduction->source_account = TRUST_ACCOUNT;
+                $auto_deduction->destination_account = ZIMSWITCH;
+                $auto_deduction->txn_status = 'PENDING';
+                $auto_deduction->description = 'Balance enquiry via wallet RRN:'. $request->rrn;
+                $auto_deduction->save();
+
 
 
                 DB::commit();
+
+
 
                 $available_balance = number_format((float)$source_new_balance, 2, '', '');
 
@@ -150,7 +198,7 @@ class BalanceOffUsController extends Controller
 
             } catch (\Exception $e) {
 
-
+                //return  $e;
                 DB::rollBack();
 
                 Log::debug('Account Number:'. $request->card_number.' '. $e);
@@ -186,269 +234,150 @@ class BalanceOffUsController extends Controller
 
         }
 
+        try{
 
 
-        try {
+        $account =  BRAccountID::where('AccountID', $request->account_number)->first();
 
+            if ($account == null){
+            return response([
+                'code' => '114',
+                'description' => 'Invalid Account',
+            ]);
+        }
 
-            $authentication = TokenService::getToken();
-            $client = new Client();
-            $result = $client->post(env('BASE_URL') . '/api/accounts/balance', [
+        if($account->IsBlocked == 1){
+            return response([
+                'code' => '114',
+                'description' => 'Account is closed',
+            ]);
+        }
 
-                'headers' => ['Authorization' => $authentication, 'Content-type' => 'application/json',],
-                'json'    => [
-                    'account_number' => $request->account_number,
-                ],
+        if($account->ClearBalance == 0){
+            $available_balance =  round($account->ClearBalance, 2) * 100;
+            return response([
+                'code'              => '000',
+                'currency'          => CURRENCY,
+                'available_balance' => $available_balance,
+                'ledger_balance'    => $available_balance,
             ]);
 
+        }
+        }catch (QueryException $queryException){
+            return response([
+                'code' => '100',
+                'description' => 'Failed to access BR',
+            ]);
 
+        }
+        $reference = $this->genRandomNumber(6,false);
+         $fees_result = FeesCalculatorService::calculateFees(
+            '0.00',
+            '0.00',
+            BALANCE_ENQUIRY_OFF_US,
+            HQMERCHANT, $request->account_number
 
-            $balance_response = json_decode($result->getBody()->getContents());
+        );
 
-            $fees_result = FeesCalculatorService::calculateFees(
-                '0.00',
-                '0.00',
-                BALANCE_ENQUIRY_OFF_US,
-                HQMERCHANT
+        $balance = round($account->ClearBalance, 2) * 100;
+        $available = $account->ClearBalance - $fees_result['minimum_balance'];
+        if ($available < $fees_result['minimum_balance']) {
 
-            );
+            PenaltyDeduction::create([
+                'amount'                => $fees_result['fees_charged'],
+                'imei'                  => '000',
+                'merchant'              => HQMERCHANT,
+                'source_account'        => $request->account_number,
+                'destination_account'   => ZIMSWITCH,
+                'txn_status'            => 'PENDING',
+                'description'           => 'Insufficient funds'
 
-            // BALANCE ENQUIRY LOGIC
-            if ($balance_response->available_balance <= $fees_result['minimum_balance']) {
+            ]);
 
-                Transactions::create([
+            return response([
+                'code'              => '000',
+                'available_balance' => "$balance",
+                'ledger_balance'    => "$balance",
+                'batch_id'          => "$reference",
+                'description'       => "SUCCESS",
+            ]);
 
-                    'txn_type_id'         => BALANCE_ENQUIRY_OFF_US,
-                    'tax'                 => '0.00',
-                    'revenue_fees'        => '0.00',
-                    'interchange_fees'    => '0.00',
-                    'zimswitch_fee'       => '0.00',
-                    'transaction_amount'  => '0.00',
-                    'total_debited'       => '0.00',
-                    'total_credited'      => '0.00',
-                    'batch_id'            => '',
-                    'switch_reference'    => '',
-                    'merchant_id'         => '',
-                    'transaction_status'  => 0,
-                    'account_debited'     => $request->account_number,
-                    'pan'                 => $request->card_number,
-                    'description'         => 'Insufficient Funds',
-
-
-                ]);
-
-
-            }
-
-
-                $zimswitch_account = ZIMSWITCH;
-                $account_debit = array('SerialNo'         => '472100',
-                                       'OurBranchID'      => $branch_id,
-                                       'AccountID'        => $request->account_number,
-                                       'TrxDescriptionID' => '007',
-                                       'TrxDescription'   => 'Balance Fees Debit',
-                                       'TrxAmount'        => '-' . $fees_result['fees_charged']);
-
-                $credit_zimswitch = array('SerialNo'         => '472100',
-                                          'OurBranchID'      => $branch_id,
-                                          'AccountID'        => $zimswitch_account,
-                                          'TrxDescriptionID' => '008',
-                                          'TrxDescription'   => "Zimswitch Revenue Account Credit",
-                                          'TrxAmount'        => $fees_result['zimswitch_fee']);
-
-
-
-                $client = new Client();
-
-                try {
-                    $result = $client->post(env('BASE_URL') . '/api/internal-transfer', [
-
-                        'headers' => ['Authorization' => $authentication, 'Content-type' => 'application/json',],
-                        'json'    => [
-                            'bulk_trx_postings' => array(
-                                $account_debit,
-                                $credit_zimswitch,
-                            ),
-                        ],
-                    ]);
-
-                    //$response_ = $result->getBody()->getContents();
-                    $response = json_decode($result->getBody()->getContents());
-
-
-                   if($response->code != '00'){
-
-                       Transactions::create([
-                           'txn_type_id'         => BALANCE_ENQUIRY_OFF_US,
-                           'tax'                 => '0.00',
-                           'revenue_fees'        => $fees_result['fees_charged'],
-                           'interchange_fees'    => '0.00',
-                           'zimswitch_fee'       => $fees_result['zimswitch_fee'],
-                           'transaction_amount'  => '0.00',
-                           'total_debited'       => $fees_result['fees_charged'],
-                           'total_credited'      => $fees_result['fees_charged'],
-                           'batch_id'            => $response->transaction_batch_id,
-                           'switch_reference'    => $response->transaction_batch_id,
-                           'merchant_id'         => '',
-                           'transaction_status'  => 0,
-                           'account_debited'     => $request->account_number,
-                           'pan'                 => $request->card_number,
-                           'description'         => 'Failed to process transaction.',
-
-                       ]);
-
-
-                       return response([
-                           'code'        => '100',
-                           'description' => 'Failed to process transaction.',
-                       ]);
-
-                   }
-
-                        Transactions::create([
-                            'txn_type_id'         => BALANCE_ENQUIRY_OFF_US,
-                            'tax'                 => '0.00',
-                            'revenue_fees'        => $fees_result['fees_charged'],
-                            'interchange_fees'    => '0.00',
-                            'zimswitch_fee'       => $fees_result['zimswitch_fee'],
-                            'transaction_amount'  => '0.00',
-                            'total_debited'       => $fees_result['fees_charged'],
-                            'total_credited'      => $fees_result['fees_charged'],
-                            'batch_id'            => $response->transaction_batch_id,
-                            'switch_reference'    => $response->transaction_batch_id,
-                            'merchant_id'         => '',
-                            'transaction_status'  => 1,
-                            'account_debited'     => $request->account_number,
-                            'pan'                 => $request->card_number,
-
-                        ]);
-
-
-                        $available_balance = round($balance_response->available_balance,2,PHP_ROUND_HALF_EVEN) * 100;
-                        $ledger_balance = round($balance_response->ledger_balance,2,PHP_ROUND_HALF_EVEN) * 100;
-
-
-                        return response([
-
-                            'code'              => '000',
-                            'fees_charged'      => $fees_result['fees_charged'] * 100,
-                            'currency'          => $currency,
-                            'available_balance' => "$available_balance",
-                            'ledger_balance'    => "$ledger_balance",
-                            'batch_id'          => "$response->transaction_batch_id",
-                            'description'       => "SUCCESS",
-
-                        ]);
-
-
-
-
-                } catch (ClientException $exception) {
-
-                    Transactions::create([
-                        'txn_type_id'         => BALANCE_ENQUIRY_OFF_US,
-                        'tax'                 => '0.00',
-                        'revenue_fees'        => '0.00',
-                        'interchange_fees'    => '0.00',
-                        'zimswitch_fee'       => '0.00',
-                        'transaction_amount'  => '0.00',
-                        'total_debited'       => '0.00',
-                        'total_credited'      => '0.00',
-                        'batch_id'            => '',
-                        'switch_reference'    => '',
-                        'merchant_id'         => '',
-                        'transaction_status'  => 0,
-                        'account_debited'     => $request->account_number,
-                        'pan'                 => $request->card_number,
-                        'description'          => $exception,
-                    ]);
-
-
-                    return response([
-                        'code'        => '100',
-                        'description' => $exception,
-                    ]);
-
-
-                }
-
-
-        } catch (RequestException $e) {
-
-            if ($e->hasResponse()) {
-                $exception = (string)$e->getResponse()->getBody();
-
-
-                Transactions::create([
-                    'txn_type_id'         => BALANCE_ENQUIRY_OFF_US,
-                    'tax'                 => '0.00',
-                    'revenue_fees'        => '0.00',
-                    'interchange_fees'    => '0.00',
-                    'zimswitch_fee'       => '0.00',
-                    'transaction_amount'  => '0.00',
-                    'total_debited'       => '0.00',
-                    'total_credited'      => '0.00',
-                    'batch_id'            => '',
-                    'switch_reference'    => '',
-                    'merchant_id'         => '',
-                    'transaction_status'  => 0,
-                    'account_debited'     => $request->account_number,
-                    'pan'                 => $request->card_number,
-                    'description'          => 'BR api validation error.',
-
-
-                ]);
-
-                Log::debug('Account Number:'. $request->account_number.' '. $exception);
-
-                return response([
-                    'code'        => '100',
-                    'description' => 'Invalid BR account number',
-                ]);
-
-            }
-
-            else {
-
-
-                Transactions::create([
-
-                    'txn_type_id'         => BALANCE_ENQUIRY_OFF_US,
-                    'tax'                 => '0.00',
-                    'revenue_fees'        => '0.00',
-                    'interchange_fees'    => '0.00',
-                    'zimswitch_fee'       => '0.00',
-                    'transaction_amount'  => '0.00',
-                    'total_debited'       => '0.00',
-                    'total_credited'      => '0.00',
-                    'batch_id'            => '',
-                    'switch_reference'    => '',
-                    'merchant_id'         => '',
-                    'transaction_status'  => 0,
-                    'account_debited'     => $request->account_number,
-                    'pan'                 => $request->card_number,
-                    'description'          => $e->getMessage(),
-
-
-                ]);
-
-                Log::debug('Account Number:'. $request->account_number.' '. $e->getMessage());
-                return response([
-                    'code'        => '100',
-                    'description' => $e->getMessage(),
-                ]);
-
-            }
         }
 
 
 
+        $br_job = new BRJob();
+        $br_job->txn_status = 'PENDING';
+        $br_job->amount = $fees_result['fees_charged'];
+        $br_job->source_account = $request->account_number;
+        $br_job->status = 'DRAFT';
+        $br_job->version = 0;
+        $br_job->tms_batch = $reference;
+        $br_job->rrn = $request->rrn;
+        $br_job->txn_type = BALANCE_ENQUIRY_OFF_US;
+        $br_job->save();
+
+        Transactions::create([
+            'txn_type_id'         => BALANCE_ENQUIRY_OFF_US,
+            'tax'                 => '0.00',
+            'revenue_fees'        => $fees_result['fees_charged'],
+            'interchange_fees'    => '0.00',
+            'zimswitch_fee'       => $fees_result['zimswitch_fee'],
+            'transaction_amount'  => '0.00',
+            'total_debited'       => $fees_result['fees_charged'],
+            'total_credited'      => $fees_result['fees_charged'],
+            'batch_id'            => $reference,
+            'merchant_id'         => '',
+            'transaction_status'  => 1,
+            'account_debited'     => $request->account_number,
+            'pan'                 => $request->card_number,
+            'description'         => 'Transaction successfully processed.'
+        ]);
+
+
+        if(isset($request->narration)){
+            $narration = $request->narration;
+        }else{
+            $narration = 'Zimswitch Transaction';
+        }
+
+        LoggingService::message('Job dispatched Balance enquiry: '.$request->account_number);
+        dispatch(new BalanceJob($request->account_number,$fees_result['fees_charged'],$reference,$request->rrn,$narration));
+
+
+        return response([
+            'code'              => '000',
+            'available_balance' => "$balance",
+            'ledger_balance'    => "$balance",
+            'batch_id'          => "$reference",
+            'description'       => "SUCCESS",
+        ]);
+
+
     }
+
     protected function balance_enquiry_off_us(Array $data){
         return Validator::make($data, [
             'card_number'    => 'required',
 
         ]);
+    }
+
+    public function genRandomNumber($length = 10, $formatted = false){
+        $nums = '0123456789';
+
+        // First number shouldn't be zero
+        $out = $nums[ mt_rand(1, strlen($nums) - 1) ];
+
+        // Add random numbers to your string
+        for ($p = 0; $p < $length - 1; $p++)
+            $out .= $nums[ mt_rand(0, strlen($nums) - 1) ];
+
+        // Format the output with commas if needed, otherwise plain output
+        if ($formatted)
+            return number_format($out);
+
+        return $out;
     }
 
 
