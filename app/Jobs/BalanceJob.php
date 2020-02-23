@@ -82,35 +82,35 @@ class BalanceJob extends Job
                 BRJob::where('tms_batch', $this->reference)->update([
                     'txn_status'    => 'FAILED',
                     'version'       => 0,
-                    'response'      => $response->description,
+                    'response'      =>  $response->description,
                 ]);
-                LoggingService::message("Balance transaction failed::: $response->description  :$this->account_number");
-                return 'FAILED';
+                LoggingService::message("Balance transaction failed  $response->description $this->account_number");
+                return "FAILED";
             }
 
             BRJob::where('tms_batch', $this->reference)->update([
                 'txn_status'    => 'COMPLETED',
-                'version'       => 0,
+                'version'    => 0,
                 'br_reference'  =>  $response->transaction_batch_id,
             ]);
-            LoggingService::message("Balance transaction processed successfully':$this->account_number");
+            LoggingService::message('Balance transaction processed successfully'.$this->account_number);
+
 
         }catch (\Exception $e) {
             if ($e->hasResponse()) {
                 $exception = (string)$e->getResponse()->getBody();
                 BRJob::where('tms_batch', $this->reference)->update([
-                    'txn_status'        => 'FAILED',
+                    'txn_status'    => 'FAILED',
                     'version'           => 0,
-                    'response'          =>  '01:Error reaching CBS , process balance txn',
+                    'response'          =>  '01:Error reaching CBS , balance enquiry',
                 ]);
                 LoggingService::message("01:Error reaching CBS, balance enquiry:$this->account_number   $exception");
 
 
             } else {
                 BRJob::where('tms_batch', $this->reference)->update([
-                    'txn_status'        => 'FAILED',
                     'version'           => 0,
-                    'response'          =>  '02:Error reaching CBS , process balance txn',
+                    'response'          =>  '01:Error reaching CBS , balance enquiry',
                 ]);
                 LoggingService::message("01:Error reaching CBS balance enquiry:$this->account_number". $e->getMessage());
 

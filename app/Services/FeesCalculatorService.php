@@ -15,11 +15,11 @@ use App\Merchant;
 
 class FeesCalculatorService
 {
-    public static function calculateFees($amount,$cash_back_amount,$transaction_type,$merchant_id,$account){
+    public static function calculateFees($amount, $cash_back_amount, $transaction_type, $merchant_id,$account){
 
 
 
-        $fee = Fee::where('transaction_type_id', $transaction_type)
+       $fee = Fee::where('transaction_type_id', $transaction_type)
             ->where('minimum_daily', '<=', $amount)
             ->where('maximum_daily', '>=', $amount)
             ->first();

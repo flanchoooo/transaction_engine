@@ -49,58 +49,43 @@ class WalletSendMoneyController extends Controller
          $destination = Wallet::where('mobile',$request->destination_mobile)->get()->first();
          $source = Wallet::where('mobile', $request->source_mobile)->get()->first();
 
-
-         // Check if source is registered.
          if(!isset($source)){
              return response([
-
                 'code' => '01',
                 'description' => 'Source mobile not registered.',
-
             ]) ;
 
          }
 
-         // Check if source is active.
          if($source->state == '0') {
              return response([
                  'code' => '02',
                  'description' => 'Source account is blocked',
-
              ]);
          }
 
-         //Check destination mobile
         if(!isset($destination)){
             return response([
-
                 'code' => '05',
                 'description' => 'Destination mobile not registered.',
-
             ]) ;
 
 
         }
 
-        //Check one is sending his or her self $
         if($source->mobile == $destination->mobile){
             return response([
-
                 'code' => '07',
                 'description' => 'Invalid transaction',
-
             ]);
 
         }
 
-        //Return response for preauth.
-        return response([
 
+        return response([
             'code' => '00',
             'description' =>'Pre-auth successful',
             'recipient_info' =>$destination,
-
-
             ]);
 
     }
@@ -124,7 +109,7 @@ class WalletSendMoneyController extends Controller
             try {
 
                 $fromQuery   = Wallet::whereMobile($request->source_mobile);
-                $destion_mobile = Wallet::whereMobile($request->destination_mobile);
+                $destination_mobile = Wallet::whereMobile($request->destination_mobile);
 
                 $amount_in_cents =  $request->amount / 100;
                 $wallet_fees = WalletFeesCalculatorService::calculateFees(
@@ -144,18 +129,6 @@ class WalletSendMoneyController extends Controller
                 if ($total_deductions > $fromAccount->balance) {
                     WalletTransactions::create([
                         'txn_type_id'       => SEND_MONEY,
-                        'tax'               => '0.00',
-                        'revenue_fees'      => '0.00',
-                        'interchange_fees'  => '0.00',
-                        'zimswitch_fee'     => '0.00',
-                        'transaction_amount'=> '0.00',
-                        'total_debited'     => '0.00',
-                        'total_credited'    => '0.00',
-                        'batch_id'          => '',
-                        'switch_reference'  => '',
-                        'merchant_id'       => '',
-                        'transaction_status'=> 0,
-                        'pan'               => '',
                         'description'       => 'Insufficient funds for mobile:' . $request->account_number,
                     ]);
 
@@ -164,6 +137,7 @@ class WalletSendMoneyController extends Controller
                         'description' => 'Insufficient funds',
                     ]);
                 }
+
                 //Check Daily Spent
                 $daily_spent =  WalletTransactions::where('account_debited', $request->source_mobile)
                     ->where('created_at', '>', Carbon::now()->subDays(1))
@@ -202,7 +176,7 @@ class WalletSendMoneyController extends Controller
                 $fromAccount->balance -= $total_deductions;
                 $fromAccount->save();
 
-                $receiving_wallet = $destion_mobile->lockForUpdate()->first();
+                $receiving_wallet = $destination_mobile->lockForUpdate()->first();
                 $receiving_wallet->balance += $amount_in_cents;
                 $receiving_wallet->save();
 
@@ -243,51 +217,27 @@ class WalletSendMoneyController extends Controller
                 $transaction->description       = 'Transaction successfully processed.';
                 $transaction->save();
 
-
-                $value_management                   = new ManageValue();
-                $value_management->account_number   = WALLET_TAX;
-                $value_management->amount           = $wallet_fees['tax'];
-                $value_management->txn_type         = DESTROY_E_VALUE;
-                $value_management->state            = 1;
-                $value_management->initiated_by     = 3;
-                $value_management->validated_by     = 3;
-                $value_management->narration        = 'Destroy E-Value';
-                $value_management->description      = 'Destroy E-Value on tax settlement'. $reference ;
-                $value_management->save();
-
-                $value_management                   = new ManageValue();
-                $value_management->account_number   = WALLET_REVENUE;
-                $value_management->amount           = $wallet_fees['fee'];
-                $value_management->txn_type         = DESTROY_E_VALUE;
-                $value_management->state            = 1;
-                $value_management->initiated_by     = 3;
-                $value_management->validated_by     = 3;
-                $value_management->narration        = 'Destroy E-Value';
-                $value_management->description      = 'Destroy E-Value on revenue settlement'. $reference ;
-                $value_management->save();
-
-                //BR Settlement
                 $auto_deduction = new Deduct();
                 $auto_deduction->imei = '000';
                 $auto_deduction->amount = $wallet_fees['tax'];
                 $auto_deduction->merchant = HQMERCHANT;
                 $auto_deduction->source_account = TRUST_ACCOUNT;
                 $auto_deduction->destination_account = TAX;
-                $auto_deduction->txn_status = 'PENDING';
+                $auto_deduction->txn_status = 'WALLET PENDING';
                 $auto_deduction->wallet_batch_id = $reference;
-                $auto_deduction->description = 'Tax settlement via wallet:'.$reference;
+                $auto_deduction->description = "WALLET |Tax settlement |$reference | $request->source_mobile";
                 $auto_deduction->save();
 
-                //BR Settlement
+
                 $auto_deduction = new Deduct();
                 $auto_deduction->imei = '000';
                 $auto_deduction->amount = $wallet_fees['fee'];
                 $auto_deduction->merchant = HQMERCHANT;
                 $auto_deduction->source_account = TRUST_ACCOUNT;
                 $auto_deduction->destination_account = REVENUE;
-                $auto_deduction->txn_status = 'PENDING';
+                $auto_deduction->txn_status = 'WALLET PENDING';
                 $auto_deduction->wallet_batch_id = $reference;
-                $auto_deduction->description = 'Revenue settlement via wallet:'.$reference;
+                $auto_deduction->description ="WALLET | Revenue settlement |$reference | $request->source_mobile";
                 $auto_deduction->save();
 
 
@@ -354,86 +304,6 @@ class WalletSendMoneyController extends Controller
 
     }
 
-    public function send_money__(Request $request)
-    {
-
-
-
-
-        $validator = $this->wallet_send_money($request->all());
-        if ($validator->fails()) {
-            return response()->json(['code' => '99', 'description' => $validator->errors()]);
-
-        }
-
-        $sender_mobile = Wallet::whereMobile($request->source_mobile);
-        $transaction_amount = $request->amount / 100;
-
-        $wallet_fees = WalletFeesCalculatorService::calculateFees(
-            $transaction_amount, SEND_MONEY
-        );
-
-        if($transaction_amount > $wallet_fees['maximum_daily']   ){
-            return response([
-                'code'          => '08',
-                'description'   => 'Amount exceed transactional limits.'
-            ]);
-        }
-
-        $deductible_amount =  $transaction_amount + $wallet_fees['fee'] + $wallet_fees['tax'];
-        $sender = $sender_mobile->lockForUpdate()->first();
-        if ($deductible_amount > $sender->balance) {
-            WalletTransactions::create([
-                'txn_type_id'       => SEND_MONEY,
-                'tax'               => '0.00',
-                'revenue_fees'      => '0.00',
-                'interchange_fees'  => '0.00',
-                'zimswitch_fee'     => '0.00',
-                'transaction_amount'=> '0.00',
-                'total_debited'     => '0.00',
-                'total_credited'    => '0.00',
-                'batch_id'          => '',
-                'switch_reference'  => '',
-                'merchant_id'       => '',
-                'transaction_status'=> 0,
-                'pan'               => '',
-                'description'       => 'Insufficient funds for mobile:' . $request->source_mobile,
-            ]);
-
-            return response([
-                'code' => '116',
-                'description' => 'Insufficient funds',
-            ]);
-        }
-
-        $this->limit_checker($request->source_mobile,$sender->wallet_cos_id);
-
-        $reference = '10'. $this->genRandomNumber();
-
-        dispatch(new WalletSendMoneyJob(
-            $request->source_mobile,
-            $request->destination_mobile,
-            $transaction_amount,
-            $wallet_fees['tax'],
-            $wallet_fees['fee'],
-            $reference,
-            $deductible_amount
-        ));
-
-
-        return response([
-            'code'          => '000',
-            'batch_id'      => "$reference",
-            'tax'           =>  $wallet_fees['tax'],
-            'revenue'       =>  $wallet_fees['fee'],
-            'description'   => 'Success'
-        ]);
-
-
-
-    }
-
-
     public function limit_checker($source_mobile,$wallet_cos_id){
 
         //Check Daily Spent
@@ -480,8 +350,6 @@ class WalletSendMoneyController extends Controller
 
         return $out;
     }
-
-
 
     protected function wallet_preauth(Array $data)
     {

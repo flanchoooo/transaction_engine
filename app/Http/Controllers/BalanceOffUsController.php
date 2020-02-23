@@ -63,20 +63,18 @@ class BalanceOffUsController extends Controller
 
 
         $card_number = substr($request->card_number, 0, 16);
-        $card_details = LuhnCards::where('track_1', $card_number)->get()->first();
-        $currency = CURRENCY;
-
-        if (isset($card_details->wallet_id)) {
+        $source_account_number  = substr($request->account_number, 0, 3);
+        if ($source_account_number == '263') {
             DB::beginTransaction();
             try {
 
-                $fromQuery = Wallet::whereId($card_details->wallet_id);
+                $fromQuery = Wallet::whereMobile($request->account_number);
                 $reference                      = $this->genRandomNumber();
                 $fees_charged = FeesCalculatorService::calculateFees(
                     '0.00',
                     '0.00',
                     BALANCE_ENQUIRY_OFF_US,
-                    HQMERCHANT
+                    HQMERCHANT,$request->account_number
 
                 );
 
@@ -105,17 +103,7 @@ class BalanceOffUsController extends Controller
 
                 if ($fees_charged['minimum_balance'] > $fromAccount->balance) {
                     WalletTransactions::create([
-
                         'txn_type_id'       => BALANCE_ENQUIRY_OFF_US,
-                        'tax'               => '0.00',
-                        'revenue_fees'      => '0.00',
-                        'interchange_fees'  => '0.00',
-                        'zimswitch_fee'     => '0.00',
-                        'transaction_amount'=> '0.00',
-                        'total_debited'     => '0.00',
-                        'total_credited'    => '0.00',
-                        'batch_id'          => '',
-                        'switch_reference'  => '',
                         'merchant_id'       => HQMERCHANT,
                         'transaction_status'=> 0,
                         'pan'               => $card_number,
@@ -150,40 +138,25 @@ class BalanceOffUsController extends Controller
                 $transaction->merchant_id       = HQMERCHANT;
                 $transaction->transaction_status= 1;
                 $transaction->account_debited   = $fromAccount->mobile;
-                $transaction->account_credited  = ZIMSWITCH_WALLET_MOBILE;
                 $transaction->pan               = $card_number;
                 $transaction->balance_after_txn = $source_new_balance;
                 $transaction->description       = 'Transaction successfully processed.';
                 $transaction->save();
 
-                $value_management                   = new ManageValue();
-                $value_management->account_number   = WALLET_REVENUE;
-                $value_management->amount           = $amount;
-                $value_management->txn_type         = DESTROY_E_VALUE;
-                $value_management->state            = 1;
-                $value_management->initiated_by     = 3;
-                $value_management->validated_by     = 3;
-                $value_management->narration        = 'Destroy E-Value';
-                $value_management->description      = 'Destroy E-Value on balance fee'. $request->account_number. 'reference:'.$reference ;
-                $value_management->save();
 
-                //BR Settlement
                 $auto_deduction = new Deduct();
                 $auto_deduction->imei = '000';
                 $auto_deduction->amount = $amount;
+                $auto_deduction->wallet_batch_id = $reference;
                 $auto_deduction->merchant = HQMERCHANT;
                 $auto_deduction->source_account = TRUST_ACCOUNT;
                 $auto_deduction->destination_account = ZIMSWITCH;
-                $auto_deduction->txn_status = 'PENDING';
-                $auto_deduction->description = 'Balance enquiry via wallet RRN:'. $request->rrn;
+                $auto_deduction->txn_status = 'WALLET PENDING';
+                $auto_deduction->description = 'WALLET | Balance enquiry via RRN: |'.  $request->rrn;
                 $auto_deduction->save();
 
 
-
                 DB::commit();
-
-
-
                 $available_balance = number_format((float)$source_new_balance, 2, '', '');
 
                 return response([
@@ -197,36 +170,22 @@ class BalanceOffUsController extends Controller
 
 
             } catch (\Exception $e) {
-
-                //return  $e;
                 DB::rollBack();
-
                 Log::debug('Account Number:'. $request->card_number.' '. $e);
 
                 WalletTransactions::create([
 
                     'txn_type_id'       => BALANCE_ENQUIRY_OFF_US,
-                    'tax'               => '0.00',
-                    'revenue_fees'      => '0.00',
-                    'interchange_fees'  => '0.00',
-                    'zimswitch_fee'     => '0.00',
-                    'transaction_amount'=> '0.00',
-                    'total_debited'     => '0.00',
-                    'total_credited'    => '0.00',
-                    'batch_id'          => '',
-                    'switch_reference'  => '',
                     'merchant_id'       => HQMERCHANT,
                     'transaction_status'=> 0,
                     'pan'               => $card_number,
                     'description'       => 'Transaction was reversed for mobbile:' . $request->account_number,
-
-
                 ]);
 
 
                 return response([
 
-                    'code' => '400',
+                    'code' => '100',
                     'description' => 'Transaction was reversed',
 
                 ]);

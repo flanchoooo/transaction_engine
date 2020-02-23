@@ -80,21 +80,12 @@ class ZipitController extends Controller
                     $request->amount/100,
                     '0.00',
                     ZIPIT_SEND,
-                    HQMERCHANT
+                    HQMERCHANT,$request->br_account
                 );
 
 
-
-                 $response =   $this->switchLimitChecks(
-                    $request->br_account,
-                    $request->amount/100 ,
-                    $fees_charged['maximum_daily'],
-                    $request->account_number,$fees_charged['transaction_count'],
-                    $fees_charged['max_daily_limit']);
-
-
-
-                if($response["code"] != '000'){
+                 $response =   $this->switchLimitChecks($request->br_account, $request->amount/100 , $fees_charged['maximum_daily'], $request->account_number,$fees_charged['transaction_count'], $fees_charged['max_daily_limit']);
+                 if($response["code"] != '000'){
                     return response([
                         'code' => $response["code"],
                         'description' => $response["description"],
@@ -112,15 +103,6 @@ class ZipitController extends Controller
                 if ($fees_charged['minimum_balance'] > $fromAccount->balance) {
                     WalletTransactions::create([
                         'txn_type_id'       => BALANCE_ON_US,
-                        'tax'               => '0.00',
-                        'revenue_fees'      => '0.00',
-                        'interchange_fees'  => '0.00',
-                        'zimswitch_fee'     => '0.00',
-                        'transaction_amount'=> '0.00',
-                        'total_debited'     => '0.00',
-                        'total_credited'    => '0.00',
-                        'batch_id'          => '',
-                        'switch_reference'  => '',
                         'merchant_id'       => HQMERCHANT,
                         'transaction_status'=> 0,
                         'description'       => 'Insufficient funds for mobile:' . $request->account_number,
@@ -135,82 +117,49 @@ class ZipitController extends Controller
                 }
 
 
-                 $zimswitch_amount = $fees_charged['zimswitch_fee'] + $request->amount/100;
-                 $tax = $fees_charged['tax'];
-                 $revenue =  $fees_charged['acquirer_fee'] + $fees_charged['zimswitch_fee'];
-                  $total_deduction = $zimswitch_amount + $tax +$revenue;
-
+                $transaction_amount = $request->amount/100;
+                $total_deduction = $transaction_amount + $fees_charged['fees_charged'];
                 $fromAccount->balance -=$total_deduction ;
                 $fromAccount->save();
 
 
-                $value_management                   = new ManageValue();
-                $value_management->account_number   = WALLET_TAX;
-                $value_management->amount           = $tax;
-                $value_management->txn_type         = DESTROY_E_VALUE;
-                $value_management->state            = 1;
-                $value_management->initiated_by     = 3;
-                $value_management->validated_by     = 3;
-                $value_management->narration        = 'Destroy E-Value';
-                $value_management->description      = 'Destroy E-Value on tax  settlement'. $reference ;
-                $value_management->save();
 
-                $value_management                   = new ManageValue();
-                $value_management->account_number   = WALLET_REVENUE;
-                $value_management->amount           = $revenue;
-                $value_management->txn_type         = DESTROY_E_VALUE;
-                $value_management->state            = 1;
-                $value_management->initiated_by     = 3;
-                $value_management->validated_by     = 3;
-                $value_management->narration        = 'Destroy E-Value';
-                $value_management->description      = 'Destroy E-Value on revenue'. $reference ;
-                $value_management->save();
-
-                $value_management                   = new ManageValue();
-                $value_management->account_number   = WALLET_REVENUE;
-                $value_management->amount           = $fromAccount->mobile;
-                $value_management->txn_type         = DESTROY_E_VALUE;
-                $value_management->state            = 1;
-                $value_management->initiated_by     = 3;
-                $value_management->validated_by     = 3;
-                $value_management->narration        = 'Destroy E-Value';
-                $value_management->description      = 'Destroy E-Value on zipit send: '. $reference  ;
-                $value_management->save();
 
                 //BR Settlement
                 $auto_deduction = new Deduct();
                 $auto_deduction->imei = '000';
-                $auto_deduction->amount = $tax;
+                $auto_deduction->amount = $fees_charged['tax'];
                 $auto_deduction->merchant = HQMERCHANT;
                 $auto_deduction->source_account = TRUST_ACCOUNT;
                 $auto_deduction->destination_account = TAX;
-                $auto_deduction->txn_status = 'PENDING';
                 $auto_deduction->wallet_batch_id = $reference;
-                $auto_deduction->description = "Tax settlement via wallet: $reference  ZSW:$request->rrn" ;
+                $auto_deduction->txn_status = 'WALLET PENDING';
+                $auto_deduction->wallet_batch_id = $reference;
+                $auto_deduction->description = "WALLET | Tax settlement, Zipit Send | $reference  ZSW:$request->rrn" ;
                 $auto_deduction->save();
 
                 //BR Settlement
                 $auto_deduction = new Deduct();
                 $auto_deduction->imei = '000';
-                $auto_deduction->amount = $revenue;
+                $auto_deduction->amount = $fees_charged['zimswitch_fee'];
                 $auto_deduction->merchant = HQMERCHANT;
                 $auto_deduction->source_account = TRUST_ACCOUNT;
                 $auto_deduction->destination_account = REVENUE;
-                $auto_deduction->txn_status = 'PENDING';
+                $auto_deduction->txn_status = 'WALLET PENDING';
                 $auto_deduction->wallet_batch_id = $reference;
-                $auto_deduction->description = "Revenue settlement via wallet: $reference  ZSW: $request->rrn";
+                $auto_deduction->description = "WALLET | Revenue settlement, Zipit Send | $reference  ZSW:$request->rrn" ;
                 $auto_deduction->save();
 
                 //BR Settlement
                 $auto_deduction = new Deduct();
                 $auto_deduction->imei = '000';
-                $auto_deduction->amount = $zimswitch_amount ;
+                $auto_deduction->amount = $request->amount /100 ;
                 $auto_deduction->merchant = HQMERCHANT;
                 $auto_deduction->source_account = TRUST_ACCOUNT;
                 $auto_deduction->destination_account = ZIMSWITCH;
-                $auto_deduction->txn_status = 'PENDING';
+                $auto_deduction->txn_status = 'WALLET PENDING';
                 $auto_deduction->wallet_batch_id = $reference;
-                $auto_deduction->description = "Zipit settlement via wallet:$reference  ZSW: $request->rrn";
+                $auto_deduction->description = "WALLET | Transaction amount settlement, Zipit Send | $reference  ZSW:$request->rrn" ;
                 $auto_deduction->save();
 
 
@@ -219,10 +168,10 @@ class ZipitController extends Controller
                 $transaction                    = new WalletTransactions();
                 $transaction->txn_type_id       = ZIPIT_SEND;
                 $transaction->tax               = $fees_charged['tax'];
-                $transaction->revenue_fees      = $fees_charged['fees_charged'];
-                $transaction->zimswitch_fee     = $fees_charged['zimswitch_fee'];
+                $transaction->revenue_fees      = $fees_charged['zimswitch_fee'];
+                $transaction->zimswitch_fee     = '0.00';
                 $transaction->transaction_amount= $request->amount/100;
-                $transaction->total_debited     = $zimswitch_amount + $revenue + $tax;
+                $transaction->total_debited     = $transaction_amount + $fees_charged['fees_charged'];
                 $transaction->total_credited    = '0.00';
                 $transaction->switch_reference  = $request->transaction_id;
                 $transaction->batch_id          = $reference;
@@ -238,38 +187,26 @@ class ZipitController extends Controller
                 DB::commit();
 
                 return response([
-                    'code'              => '000',
-                    'batch_id'          => "$reference",
-                    'transaction_batch_id'        => "$reference",
-                    'description'       => 'Success'
+                    'code'                              => '000',
+                    'batch_id'                          => "$reference",
+                    'transaction_batch_id'              => "$reference",
+                    'description'                       => 'Success'
 
                 ]);
 
 
             } catch (\Exception $e) {
                 DB::rollBack();
-
                 WalletTransactions::create([
-                    'txn_type_id'       => ZIPIT_SEND,
-                    'tax'               => '0.00',
-                    'revenue_fees'      => '0.00',
-                    'interchange_fees'  => '0.00',
-                    'zimswitch_fee'     => '0.00',
-                    'transaction_amount'=> '0.00',
-                    'total_debited'     => '0.00',
-                    'total_credited'    => '0.00',
-                    'batch_id'          => '',
-                    'switch_reference'  => '',
                     'merchant_id'       => HQMERCHANT,
                     'transaction_status'=> 0,
-                    'pan'               => '',
                     'description'       => 'Transaction was reversed for mobbile:' . $request->account_number,
                 ]);
 
 
                 return response([
-                    'code' => '400',
-                    'description' => 'Transaction was reversed',
+                    'code' => '100',
+                    'description' => 'Transaction failed',
                 ]);
             }
 
@@ -317,7 +254,7 @@ class ZipitController extends Controller
                     'our_branch_id'      => $branch_id,
                     'account_id'        => $request->br_account,
                     'trx_description_id' => '007',
-                    'trx_description'   => "ZIPIT SEND ($request->destination_bank : $request->destination_account)",
+                    'trx_description'   => "ZIPIT SEND",
                     'trx_amount'        => - $request->amount/100);
 
                 $account_debit_fees = array(
@@ -653,6 +590,7 @@ class ZipitController extends Controller
             ->get()->count();
 
         $daily_spent =  Transactions::where('account_debited', $account_number)
+            ->where('txn_type_id',ZIPIT_SEND)
             ->where('created_at', '>', Carbon::now()->subDays(1))
             ->sum('transaction_amount');
 
@@ -758,26 +696,31 @@ class ZipitController extends Controller
 
     public function receive(Request $request){
 
+
         $account_checker = substr($request->br_account,0, 3);
         $reference                      = $this->genRandomNumber();
+
+        $rrn_result = BRJob::where('rrn', $request->rrn)->get()->count();
+       if($rrn_result > 0) {
+           return response([
+
+               'code' => '100',
+               'description' => 'Do not honor'
+
+           ]);
+       }
 
         if ($account_checker == '263') {
 
             DB::beginTransaction();
             try {
 
-
                 $toQuery = Wallet::whereMobile($request->br_account);
                 $zipit_amount = $request->amount/100;
-
-
-
                 //Fee Deductions.
                 $toAccount = $toQuery->lockForUpdate()->first();
                 $toAccount->balance += $zipit_amount;
                 $toAccount->save();
-
-
 
                 $source_new_balance_             = $toAccount->balance;
                 $transaction                    = new WalletTransactions();
@@ -799,15 +742,6 @@ class ZipitController extends Controller
                 $transaction->description       = 'Transaction successfully processed.';
                 $transaction->save();
 
-                $value_management                   = new ManageValue();
-                $value_management->account_number   = $request->br_account;
-                $value_management->amount           = $zipit_amount;
-                $value_management->txn_type         = CREATE_VALUE;
-                $value_management->state            = 1;
-                $value_management->initiated_by     = 3;
-                $value_management->validated_by     = 3;
-                $value_management->narration        = 'Create E-Value';
-                $value_management->description      = 'Credit E-Value on zipit credit push'. $reference;
 
                 //BR Settlement
                 $auto_deduction = new Deduct();
@@ -816,9 +750,9 @@ class ZipitController extends Controller
                 $auto_deduction->merchant = HQMERCHANT;
                 $auto_deduction->source_account = ZIMSWITCH;
                 $auto_deduction->destination_account = TRUST_ACCOUNT;
-                $auto_deduction->txn_status = 'PENDING';
+                $auto_deduction->txn_status = 'WALLET PENDING';
                 $auto_deduction->wallet_batch_id = $reference;
-                $auto_deduction->description = 'Credit wallet via wallet zipit receive:'.$reference;
+                $auto_deduction->description = 'WALLET | Credit wallet via wallet zipit receive:'.$reference;
                 $auto_deduction->save();
 
                 DB::commit();
@@ -837,36 +771,19 @@ class ZipitController extends Controller
 
 
 
-
             } catch (\Exception $e) {
                 DB::rollBack();
-                Log::debug('Account Number:'.$request->br_account.' '. $e);
-
                 WalletTransactions::create([
-
                     'txn_type_id'       => ZIPIT_RECEIVE,
-                    'tax'               => '0.00',
-                    'revenue_fees'      => '0.00',
-                    'interchange_fees'  => '0.00',
-                    'zimswitch_fee'     => '0.00',
-                    'transaction_amount'=> '0.00',
-                    'total_debited'     => '0.00',
-                    'total_credited'    => '0.00',
-                    'batch_id'          => '',
-                    'switch_reference'  => '',
-                    'merchant_id'       => '',
                     'transaction_status'=> 0,
-                    'pan'               => '',
                     'description'       => 'Transaction was reversed for mobbile:' . $request->br_account,
-
-
                 ]);
 
 
                 return response([
 
-                    'code' => '400',
-                    'description' => 'Transaction was reversed',
+                    'code' => '100',
+                    'description' => 'Transaction failed',
 
                 ]);
             }
@@ -968,7 +885,9 @@ class ZipitController extends Controller
         }
 
 
-        LoggingService::message('Zipit successfully dispatched:'.$request->br_account);
+
+
+
         dispatch(new ZipitReceive($request->br_account,$request->amount /100,$reference,$request->rrn,$narration));
         return response([
             'code'              => '000',

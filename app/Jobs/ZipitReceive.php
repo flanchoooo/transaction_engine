@@ -51,7 +51,7 @@ class ZipitReceive extends Job
             'our_branch_id'         => $branch_id,
             'account_id'            => $this->account_number,
             'trx_description_id'    => '007',
-            'trx_description'       => "Zipit receive | $this->narration",
+            'trx_description'       => "SP | Zipit receive | $this->narration",
             'trx_amount'            => $this->amount);
 
 
@@ -60,7 +60,7 @@ class ZipitReceive extends Job
             'our_branch_id'         =>$branch_id,
             'account_id'            => ZIMSWITCH,
             'trx_description_id'    => '008',
-            'trx_description'       => "Zipit receive: $this->rrn account:$this->account_number",
+            'trx_description'       => "SP | Zipit receive: $this->rrn account:$this->account_number",
             'trx_amount'            =>   - $this->amount);
 
 
@@ -84,8 +84,8 @@ class ZipitReceive extends Job
                     'version'       => 0,
                     'response'      =>  $response->description,
                 ]);
-                LoggingService::message('Zipit receive transaction failed  $response->description'.$this->account_number);
-                return "failed";
+                LoggingService::message("Zipit receive transaction failed  $response->description $this->account_number");
+                return "FAILED";
             }
 
             BRJob::where('tms_batch', $this->reference)->update([

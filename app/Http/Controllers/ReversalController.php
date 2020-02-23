@@ -734,6 +734,7 @@ class ReversalController extends Controller
                     'code' => '01',
                     'description' => 'Transaction already reversed.'
                 ]);
+
             }
 
 
@@ -743,139 +744,45 @@ class ReversalController extends Controller
                 //Source Account
                 $source = Wallet::whereMobile($wallet_batch->account_debited);
                 $revenue = Wallet::whereMobile(WALLET_REVENUE);
-                $tax = Wallet::whereMobile(WALLET_TAX);
                 $destination = Wallet::whereMobile($wallet_batch->account_credited);
                 $currency = CURRENCY;
 
                 $destination_mobile = $destination->lockForUpdate()->first();
 
-                if ($wallet_batch->txn_type_id == ZIPIT_SEND) {
-
-                    $zipit_fees = FeesCalculatorService::calculateFees(
-                        $wallet_batch->transaction_amount,
-                        '0.00',
-                        ZIPIT_SEND,
-                        HQMERCHANT
-                    );
-
-                    /*  if($destination_mobile->balance <  $wallet_batch->transaction_amount){
-                          return response([
-                              'code'          => '100',
-                              'description'   => 'Source account does not have sufficient funds to perform a reversal',
-                          ]);
-
-                      }
-
-
-                      $revenue_mobile = $revenue->lockForUpdate()->first();
-                      $revenue_mobile->balance -= $zipit_fees['acquirer_fee'];
-                      $revenue_mobile->save();
-
-                      $tax_mobile = $tax->lockForUpdate()->first();
-                      $tax_mobile->balance -=$zipit_fees['tax'];
-                      $tax_mobile->save();
-
-
-                      $destination_mobile->balance -= $wallet_batch->transaction_amount + $zipit_fees['zimswitch_fee'] ;
-                      $destination_mobile->save();
-
-                    */
-
-                    //Refund total debited.
-                    $total = $wallet_batch->transaction_amount + $zipit_fees['acquirer_fee'] + $zipit_fees['tax'] + $zipit_fees['zimswitch_fee'];
+                if ($wallet_batch->txn_type_id == BANK_TO_WALLET) {
+                    $total = $wallet_batch->transaction_amount;
                     $source_mobile = $source->lockForUpdate()->first();
-                    $source_mobile->balance += $total;
+                    $source_mobile->balance -= $total;
                     $source_mobile->save();
-
 
                     $wallet_batch->reversed = 'REVERSED';
                     $wallet_batch->transaction_status = '3';
                     $wallet_batch->description = 'Original transaction was successfully reversed.';
                     $wallet_batch->save();
 
-
-                    //BR Settlement
-                    $auto_deduction = new Deduct();
-                    $auto_deduction->imei = '000';
-                    $auto_deduction->amount = $zipit_fees['tax'];
-                    $auto_deduction->merchant = HQMERCHANT;
-                    $auto_deduction->source_account = TAX;
-                    $auto_deduction->destination_account = TRUST_ACCOUNT;
-                    $auto_deduction->txn_status = 'PENDING';
-                    $auto_deduction->description = 'Tax settlement via wallet reversal:' . $request->transaction_batch_id;
-                    $auto_deduction->save();
-
-
-                    //BR Settlement
-                    $auto_deduction = new Deduct();
-                    $auto_deduction->imei = '000';
-                    $auto_deduction->amount = $zipit_fees['acquirer_fee'];
-                    $auto_deduction->merchant = HQMERCHANT;
-                    $auto_deduction->source_account = REVENUE;
-                    $auto_deduction->destination_account = TRUST_ACCOUNT;
-                    $auto_deduction->txn_status = 'PENDING';
-                    $auto_deduction->description = 'Revenue settlement via wallet reversal:' . $request->transaction_batch_id;
-                    $auto_deduction->save();
-
-                    //BR Settlement
-                    $auto_deduction = new Deduct();
-                    $auto_deduction->imei = '000';
-                    $auto_deduction->amount = $wallet_batch->transaction_amount + $zipit_fees['acquirer_fee'] + $zipit_fees['zimswitch_fee'];
-                    $auto_deduction->merchant = HQMERCHANT;
-                    $auto_deduction->source_account = ZIMSWITCH;
-                    $auto_deduction->destination_account = TRUST_ACCOUNT;
-                    $auto_deduction->txn_status = 'PENDING';
-                    $auto_deduction->description = 'Revenue settlement via wallet reversal:' . $request->transaction_batch_id;
-                    $auto_deduction->save();
-
                     DB::commit();
                     return response([
                         'code' => '000',
-                        'description' => 'Successfully reversed ZIPIT send transaction'
+                        'description' => 'Successfully reversed bank to wallet transaction'
                     ]);
-
                 }
 
                 //Balance On Us reversal
                 if ($wallet_batch->txn_type_id == BALANCE_ON_US) {
                     $balance_onus_fees = FeesCalculatorService::calculateFees(
                         '0.00', '0.00', BALANCE_ON_US,
-                        $wallet_batch->merchant_id
+                        $wallet_batch->merchant_id,$wallet_batch->account_debited
                     );
 
-                    /* if($destination_mobile->balance <  $wallet_batch->transaction_amount){
-                         return response([
-                             'code'          => '100',
-                             'description'   => 'Source account does not have sufficient funds to perform a reversal',
-                         ]);
-
-                     }
-
-                     // $destination_mobile->balance -= $balance_onus_fees['acquirer_fee'];
-                     // $destination_mobile->save();
-
-                    */
-
-                    $value_management = new ManageValue();
-                    $value_management->account_number = WALLET_REVENUE;
-                    $value_management->amount = $balance_onus_fees['acquirer_fee'];
-                    $value_management->txn_type = CREATE_VALUE;
-                    $value_management->state = 1;
-                    $value_management->initiated_by = 3;
-                    $value_management->validated_by = 3;
-                    $value_management->narration = 'Create E-Value';
-                    $value_management->description = 'Create E-Value on balance fee reversal' . $request->account_number . 'reference:' . $request->transaction_batch_id;
-                    $value_management->save();
-
-                    //BR Settlement
                     $auto_deduction = new Deduct();
                     $auto_deduction->imei = '000';
                     $auto_deduction->amount = $balance_onus_fees['acquirer_fee'];
+                    $auto_deduction->wallet_batch_id = $request->transaction_batch_id;
                     $auto_deduction->merchant = HQMERCHANT;
                     $auto_deduction->source_account = REVENUE;
                     $auto_deduction->destination_account = TRUST_ACCOUNT;
-                    $auto_deduction->txn_status = 'PENDING';
-                    $auto_deduction->description = 'Reversal for:' . $request->transaction_batch_id;
+                    $auto_deduction->txn_status = 'WALLET PENDING';
+                    $auto_deduction->description = 'WALLET | Reversal for on us balance enquiry |' . $request->transaction_batch_id;
                     $auto_deduction->save();
 
                     $source_mobile = $source->lockForUpdate()->first();
@@ -902,19 +809,9 @@ class ReversalController extends Controller
                 if ($wallet_batch->txn_type_id == BALANCE_ENQUIRY_OFF_US) {
                     $balance_onus_fees = FeesCalculatorService::calculateFees(
                         '0.00', '0.00', BALANCE_ENQUIRY_OFF_US,
-                        HQMERCHANT
+                        HQMERCHANT,$wallet_batch->account_debited
                     );
 
-                    /* if($destination_mobile->balance <  $wallet_batch->transaction_amount){
-                         return response([
-                             'code'          => '100',
-                             'description'   => 'Source account does not have sufficient funds to perform a reversal',
-                         ]);
-
-                     }
-                     $destination_mobile->balance -= $balance_onus_fees['zimswitch_fee'];
-                     $destination_mobile->save();
-                     */
 
                     $source_mobile = $source->lockForUpdate()->first();
                     $source_mobile->balance += $balance_onus_fees['zimswitch_fee'];
@@ -926,31 +823,20 @@ class ReversalController extends Controller
                     $wallet_batch->description = 'Original transaction was successfully reversed.';
                     $wallet_batch->save();
 
-                    $value_management = new ManageValue();
-                    $value_management->account_number = WALLET_REVENUE;
-                    $value_management->amount = $balance_onus_fees['zimswitch_fee'];
-                    $value_management->txn_type = CREATE_VALUE;
-                    $value_management->state = 1;
-                    $value_management->initiated_by = 3;
-                    $value_management->validated_by = 3;
-                    $value_management->narration = 'Create E-Value';
-                    $value_management->description = 'Create E-Value on balance fee reversal' . $request->account_number . 'reference:' . $request->transaction_batch_id;
-                    $value_management->save();
+
 
                     //BR Settlement
                     $auto_deduction = new Deduct();
                     $auto_deduction->imei = '000';
                     $auto_deduction->amount = $balance_onus_fees['acquirer_fee'];
+                    $auto_deduction->wallet_batch_id =$request->transaction_batch_id;
                     $auto_deduction->merchant = HQMERCHANT;
                     $auto_deduction->source_account = ZIMSWITCH;
                     $auto_deduction->destination_account = TRUST_ACCOUNT;
-                    $auto_deduction->txn_status = 'PENDING';
-                    $auto_deduction->description = 'Reversal for:' . $request->transaction_batch_id;
+                    $auto_deduction->txn_status = 'WALLET PENDING';
+                    $auto_deduction->description = 'WALLET | Reversal for balance off us |'  . $request->transaction_batch_id;
                     $auto_deduction->save();
-
-
                     DB::commit();
-
                     return response([
                         'code' => '000',
                         'description' => 'Successfully reversed balance remote on us transaction.'
@@ -963,38 +849,10 @@ class ReversalController extends Controller
                 if ($wallet_batch->txn_type_id == PURCHASE_ON_US) {
                     $purchase_fees = FeesCalculatorService::calculateFees(
                         $wallet_batch->transaction_amount, '0.00', PURCHASE_ON_US,
-                        $wallet_batch->merchant_id
+                        $wallet_batch->merchant_id,$wallet_batch->account_debited
                     );
 
-                    $less_mdr = $wallet_batch->transaction_amount - $purchase_fees['mdr'];
-                    $less_revenue = $purchase_fees['mdr'] + $purchase_fees['acquirer_fee'];
-                    $less_fees = $purchase_fees['tax'] + $purchase_fees['acquirer_fee'];
-                    $credit_source = $wallet_batch->transaction_amount + $less_fees;
-
                     $source_deductions = $purchase_fees['tax'] + $purchase_fees['acquirer_fee'] + $wallet_batch->transaction_amount;
-
-                    /*  if($destination_mobile->balance <  $less_mdr){
-                          return response([
-                              'code'          => '100',
-                              'description'   => 'Source account does not have sufficient funds to perform a reversal',
-                          ]);
-
-                      }
-
-                      $tax_mobile = $tax->lockForUpdate()->first();
-                      $tax_mobile->balance -= $purchase_fees['tax'];
-                      $tax_mobile->save();
-
-                      $revenue_mobile = $revenue->lockForUpdate()->first();
-                      $revenue_mobile->balance -= $less_revenue;
-                      $revenue_mobile->save();
-
-
-                      $destination_mobile->balance -= $less_mdr;
-                      $destination_mobile->save();
-
-                    */
-
                     $source_mobile = $source->lockForUpdate()->first();
                     $source_mobile->balance += $source_deductions;
                     $source_mobile->save();
@@ -1011,8 +869,8 @@ class ReversalController extends Controller
                     $auto_deduction->merchant = HQMERCHANT;
                     $auto_deduction->source_account = REVENUE;
                     $auto_deduction->destination_account = TRUST_ACCOUNT;
-                    $auto_deduction->txn_status = 'PENDING';
-                    $auto_deduction->description = 'Wallet settlement on purchase reversal:' . $request->account_number . ' ' . $request->transaction_batch_id;
+                    $auto_deduction->txn_status = 'WALLET PENDING';
+                    $auto_deduction->description = 'WALLET |Purchase on us revenue reversal |' . $request->account_number . ' ' . $request->transaction_batch_id;
                     $auto_deduction->save();
 
                     //Tax Settlement
@@ -1022,23 +880,26 @@ class ReversalController extends Controller
                     $auto_deduction->merchant = HQMERCHANT;
                     $auto_deduction->source_account = TAX;
                     $auto_deduction->destination_account = TRUST_ACCOUNT;
-                    $auto_deduction->txn_status = 'PENDING';
-                    $auto_deduction->description = 'Wallet settlement on purchase reversal:' . $request->account_number . ' ' . $request->transaction_batch_id;
+                    $auto_deduction->txn_status = 'WALLET PENDING';
+                    $auto_deduction->description = 'WALET |Purchase on us tax reversal' . $request->account_number . ' ' . $request->transaction_batch_id;
                     $auto_deduction->save();
 
                     $merchant_account = MerchantAccount::where('merchant_id', $wallet_batch->merchant_id)->first();
+                    $total = $wallet_batch->transaction_amount - $purchase_fees['mdr'];
                     $auto_deduction = new Deduct();
                     $auto_deduction->imei = '000';
-                    $auto_deduction->amount = $less_mdr;
+                    $auto_deduction->amount = $total;
                     $auto_deduction->merchant = HQMERCHANT;
-                    $auto_deduction->source_account = TRUST_ACCOUNT;
-                    $auto_deduction->destination_account = $merchant_account->account_number;
-                    $auto_deduction->txn_status = 'PENDING';
+                    $auto_deduction->source_account =  $merchant_account->account_number;
+                    $auto_deduction->destination_account = TRUST_ACCOUNT;
+                    $auto_deduction->txn_status = 'WALLET PENDING';
                     $auto_deduction->description = 'Wallet settlement on purchase reversal:' . $request->account_number . ' ' . $request->transaction_batch_id;
                     $auto_deduction->save();
 
 
                     DB::commit();
+
+
 
                     return response([
                         'code' => '000',
@@ -1048,75 +909,15 @@ class ReversalController extends Controller
 
                 }
 
-                //Purchase Off Us Reversal
                 if ($wallet_batch->txn_type_id == PURCHASE_OFF_US) {
                     $purchase_fees = FeesCalculatorService::calculateFees(
                         $wallet_batch->transaction_amount, '0.00', PURCHASE_OFF_US,
-                        HQMERCHANT
+                        HQMERCHANT,$wallet_batch->account_debited
                     );
 
-                    $less_revenue = $purchase_fees['interchange_fee'];
-                    $less_fees = $purchase_fees['tax'] + $purchase_fees['acquirer_fee'];
-                    $credit_source = $wallet_batch->transaction_amount + $less_fees;
-
-                    $total = $wallet_batch->transaction_amount + $purchase_fees['acquirer_fee'] + $purchase_fees['zimswitch_fee'] + $purchase_fees['tax'] + $purchase_fees['interchange_fee'];
 
 
-                    /*if($destination_mobile->balance <  $less_mdr){
-                        return response([
-                            'code'          => '100',
-                            'description'   => 'Source account does not have sufficient funds to perform a reversal',
-                        ]);
-
-                    }
-                    $tax_mobile = $tax->lockForUpdate()->first();
-                    $tax_mobile->balance -= $purchase_fees['tax'];
-                    $tax_mobile->save();
-
-                    $revenue_mobile = $revenue->lockForUpdate()->first();
-                    $revenue_mobile->balance -= $less_revenue;
-                    $revenue_mobile->save();
-
-
-                    $destination_mobile->balance -= $less_mdr;
-                    $destination_mobile->save();
-                    */
-
-
-                    //Tax Settlement
-                    $auto_deduction = new Deduct();
-                    $auto_deduction->imei = '000';
-                    $auto_deduction->amount = $purchase_fees['tax'];
-                    $auto_deduction->merchant = HQMERCHANT;
-                    $auto_deduction->source_account = TAX;
-                    $auto_deduction->destination_account = TRUST_ACCOUNT;
-                    $auto_deduction->txn_status = 'PENDING';
-                    $auto_deduction->description = 'Wallet tax settlement on purchase (off us)reversal:' . $request->transaction_batch_id;
-                    $auto_deduction->save();
-
-                    //Revenue Settlement
-                    $auto_deduction = new Deduct();
-                    $auto_deduction->imei = '000';
-                    $auto_deduction->amount = $less_revenue;
-                    $auto_deduction->merchant = HQMERCHANT;
-                    $auto_deduction->source_account = REVENUE;
-                    $auto_deduction->destination_account = TRUST_ACCOUNT;
-                    $auto_deduction->txn_status = 'PENDING';
-                    $auto_deduction->description = 'Wallet revenue settlement on purchase:(off us) reversal:' . $request->transaction_batch_id;
-                    $auto_deduction->save();
-
-                    //Revenue Settlement
-                    $auto_deduction = new Deduct();
-                    $auto_deduction->imei = '000';
-                    $auto_deduction->amount = $total;
-                    $auto_deduction->merchant = HQMERCHANT;
-                    $auto_deduction->source_account = ZIMSWITCH;
-                    $auto_deduction->destination_account = TRUST_ACCOUNT;
-                    $auto_deduction->txn_status = 'PENDING';
-                    $auto_deduction->description = 'Wallet  settlement on purchase:(off us)reversal:' . $request->transaction_batch_id;
-                    $auto_deduction->save();
-
-
+                    $total = $wallet_batch->transaction_amount + $purchase_fees['acquirer_fee'] + $purchase_fees['zimswitch_fee'] + $purchase_fees['tax'];
                     $source_mobile = $source->lockForUpdate()->first();
                     $source_mobile->balance += $total;
                     $source_mobile->save();
@@ -1126,6 +927,43 @@ class ReversalController extends Controller
                     $wallet_batch->transaction_status = '3';
                     $wallet_batch->description = 'Original transaction was successfully reversed.';
                     $wallet_batch->save();
+
+                    //Tax Settlement
+                    $auto_deduction = new Deduct();
+                    $auto_deduction->imei = '000';
+                    $auto_deduction->amount = $purchase_fees['tax'];
+                    $auto_deduction->merchant = HQMERCHANT;
+                    $auto_deduction->source_account = TAX;
+                    $auto_deduction->destination_account = TRUST_ACCOUNT;
+                    $auto_deduction->wallet_batch_id = $request->transaction_batch_id;
+                    $auto_deduction->txn_status = 'WALLET PENDING';
+                    $auto_deduction->description = 'WALLET | Tax reversal on purchase (off us)reversal |' . $request->transaction_batch_id;
+                    $auto_deduction->save();
+
+                    //Revenue Settlement
+                    $auto_deduction = new Deduct();
+                    $auto_deduction->imei = '000';
+                    $auto_deduction->amount = $purchase_fees['acquirer_fee'];
+                    $auto_deduction->merchant = HQMERCHANT;
+                    $auto_deduction->source_account = REVENUE;
+                    $auto_deduction->destination_account = TRUST_ACCOUNT;
+                    $auto_deduction->wallet_batch_id = $request->transaction_batch_id;
+                    $auto_deduction->txn_status = 'WALLET PENDING';
+                    $auto_deduction->description = 'WALLET | Revenue reversal on purchase (off us)reversal |' . $request->transaction_batch_id;
+                    $auto_deduction->save();
+
+                    //Revenue Settlement
+                    $auto_deduction = new Deduct();
+                    $auto_deduction->imei = '000';
+                    $auto_deduction->amount = $purchase_fees['zimswitch_fee'] + $wallet_batch->transaction_amount ;
+                    $auto_deduction->merchant = HQMERCHANT;
+                    $auto_deduction->source_account = ZIMSWITCH;
+                    $auto_deduction->destination_account = TRUST_ACCOUNT;
+                    $auto_deduction->txn_status = 'PENDING';
+                    $auto_deduction->description = 'WALLET | Zimswitch reversal  on purchase:(off us)reversal | ' . $request->transaction_batch_id;
+                    $auto_deduction->save();
+
+
 
 
                     DB::commit();
@@ -1139,24 +977,50 @@ class ReversalController extends Controller
                 }
 
                 if ($wallet_batch->txn_type_id == ZIPIT_RECEIVE) {
-
-                    /*  if($destination_mobile->balance <  $wallet_batch->transaction_amount){
-                          return response([
-                              'code'          => '100',
-                              'description'   => 'Source account does not have sufficient funds to perform a reversal',
-                          ]);
-
-                      }
-
-                      $source_mobile = $source->lockForUpdate()->first();
-                      $source_mobile->balance += $wallet_batch->transaction_amount;
-                      $source_mobile->save();
-
-                    */
-
-
                     $destination_mobile->balance -= $wallet_batch->transaction_amount;;
                     $destination_mobile->save();
+
+                    $wallet_batch->reversed = 'REVERSED';
+                    $wallet_batch->transaction_status = '3';
+                    $wallet_batch->description = 'Original transaction was successfully reversed.';
+                    $wallet_batch->save();
+
+
+                    $auto_deduction = new Deduct();
+                    $auto_deduction->imei = '000';
+                    $auto_deduction->wallet_batch_id = $request->transaction_batch_id;
+                    $auto_deduction->amount = $wallet_batch->transaction_amount;
+                    $auto_deduction->merchant = HQMERCHANT;
+                    $auto_deduction->source_account = TRUST_ACCOUNT;
+                    $auto_deduction->destination_account = ZIMSWITCH;
+                    $auto_deduction->txn_status = 'WALLET PENDING';
+                    $auto_deduction->description = 'WALLET | Zipit reversal | ' . $request->transaction_batch_id;
+                    $auto_deduction->save();
+
+                    DB::commit();
+                    return response([
+                        'code' => '000',
+                        'description' => 'Successfully reversed ZIPIT receive transaction'
+                    ]);
+
+                }
+
+                if ($wallet_batch->txn_type_id == ZIPIT_SEND) {
+
+                    $zipit_fees = FeesCalculatorService::calculateFees(
+                        $wallet_batch->transaction_amount,
+                        '0.00',
+                        ZIPIT_SEND,
+                        HQMERCHANT,$wallet_batch->account_debited
+                    );
+
+
+
+                    //Refund total debited.
+                    $total = $wallet_batch->transaction_amount + $zipit_fees['acquirer_fee'] + $zipit_fees['tax'] + $zipit_fees['zimswitch_fee'];
+                    $source_mobile = $source->lockForUpdate()->first();
+                    $source_mobile->balance += $total;
+                    $source_mobile->save();
 
 
                     $wallet_batch->reversed = 'REVERSED';
@@ -1164,29 +1028,57 @@ class ReversalController extends Controller
                     $wallet_batch->description = 'Original transaction was successfully reversed.';
                     $wallet_batch->save();
 
+
                     //BR Settlement
                     $auto_deduction = new Deduct();
                     $auto_deduction->imei = '000';
-                    $auto_deduction->amount = $wallet_batch->transaction_amount;;
+                    $auto_deduction->amount = $zipit_fees['tax'];
                     $auto_deduction->merchant = HQMERCHANT;
-                    $auto_deduction->source_account = TRUST_ACCOUNT;
-                    $auto_deduction->destination_account = ZIMSWITCH;
-                    $auto_deduction->txn_status = 'PENDING';
-                    $auto_deduction->description = 'Credit wallet via wallet zipit receive reversal:' . $request->transaction_batch_id;
+                    $auto_deduction->source_account = TAX;
+                    $auto_deduction->destination_account = TRUST_ACCOUNT;
+                    $auto_deduction->txn_status = 'WALLET PENDING';
+                    $auto_deduction->wallet_batch_id = $request->transaction_batch_id;
+                    $auto_deduction->description = 'WALLET | Zipit reversal |' . $request->transaction_batch_id;
+                    $auto_deduction->save();
+
+
+                    //BR Settlement
+                    $auto_deduction = new Deduct();
+                    $auto_deduction->imei = '000';
+                    $auto_deduction->amount = $zipit_fees['zimswitch_fee'];
+                    $auto_deduction->merchant = HQMERCHANT;
+                    $auto_deduction->source_account = REVENUE;
+                    $auto_deduction->destination_account = TRUST_ACCOUNT;
+                    $auto_deduction->txn_status = 'WALLET PENDING';
+                    $auto_deduction->wallet_batch_id = $request->transaction_batch_id;
+                    $auto_deduction->description = 'WALLET | Zipit reversal |' . $request->transaction_batch_id;
+                    $auto_deduction->save();
+
+                    //BR Settlement
+                    $auto_deduction = new Deduct();
+                    $auto_deduction->imei = '000';
+                    $auto_deduction->amount = $wallet_batch->transaction_amount;
+                    $auto_deduction->merchant = HQMERCHANT;
+                    $auto_deduction->source_account = ZIMSWITCH;
+                    $auto_deduction->destination_account = TRUST_ACCOUNT;
+                    $auto_deduction->txn_status = 'WALLET PENDING';
+                    $auto_deduction->wallet_batch_id = $request->transaction_batch_id;
+                    $auto_deduction->description = 'WALLET | Zipit reversal |' . $request->transaction_batch_id;
                     $auto_deduction->save();
 
                     DB::commit();
-
                     return response([
                         'code' => '000',
-                        'description' => 'Successfully reversed ZIPIT receive transaction'
+                        'description' => 'Successfully reversed ZIPIT send transaction'
                     ]);
 
-                    //return $wallet_batch;
                 }
 
-                if ($wallet_batch->txn_type_id == SEND_MONEY) {
 
+
+
+                //Purchase Off Us Reversal
+                if ($wallet_batch->txn_type_id == SEND_MONEY) {
                     $wallet_fees = WalletFeesCalculatorService::calculateFees(
                         $wallet_batch->transaction_amount,
                         $wallet_batch->txn_type_id);
@@ -1329,13 +1221,12 @@ class ReversalController extends Controller
 
                 }
 
-
+                //Any Other Bill Payment Reversal
                 $wallet_fees = WalletFeesCalculatorService::calculateFees(
                     $wallet_batch->transaction_amount,
                     $wallet_batch->txn_type_id
 
                 );
-
                 if ($wallet_fees['fee_type'] == 'EXCLUSIVE') {
                     $source_mobile = $source->lockForUpdate()->first();
                     if ($source_mobile->wallet_type != 'BILLER') {
@@ -1369,70 +1260,26 @@ class ReversalController extends Controller
                     $wallet_batch->save();
 
                     DB::commit();
-
                     return response([
                         'code' => '000',
                         'description' => 'Successfully reversed bill-payment transaction'
                     ]);
 
 
-                    /*if($destination_mobile->balance <  $wallet_batch->transaction_amount){
-                        return response([
-                            'code'          => '100',
-                            'description'   => 'Source account does not have sufficient funds to perform a reversal',
-                        ]);
-
-                    }
-
-
-                    $total = $wallet_batch->transaction_amount + $wallet_fees['fee'] + $wallet_fees['tax'] ;
-                    $source_mobile = $source->lockForUpdate()->first();
-                    $source_mobile->balance += $total;
-                    $source_mobile->save();
-
-                    $revenue_mobile = $revenue->lockForUpdate()->first();
-                    $revenue_mobile->balance -= $wallet_fees['fee'];
-                    $revenue_mobile->save();
-
-                    $tax_mobile = $tax->lockForUpdate()->first();
-                    $tax_mobile->balance -=$wallet_fees['tax'];
-                    $tax_mobile->save();
-
-
-                    $destination_mobile->balance -=$wallet_batch->transaction_amount;
-                    $destination_mobile->save();
-                    */
-
-
                 }
 
 
             } catch (\Exception $e) {
-
-
                 DB::rollBack();
-                Log::debug('Account Number:' . $request->account_number . ' ' . $e);
                 WalletTransactions::create([
-                    'txn_type_id' => SEND_MONEY,
-                    'tax' => '0.00',
-                    'revenue_fees' => '0.00',
-                    'interchange_fees' => '0.00',
-                    'zimswitch_fee' => '0.00',
-                    'transaction_amount' => '0.00',
-                    'total_debited' => '0.00',
-                    'total_credited' => '0.00',
-                    'batch_id' => '',
-                    'switch_reference' => '',
-                    'merchant_id' => '',
-                    'transaction_status' => 0,
-                    'pan' => '',
-                    'description' => 'Transaction was reversed for mobbile:' . $request->account_number,
+                    'txn_type_id'       => REVERSAL,
+                    'description'       => 'Transaction was reversed for mobbile:' . $request->account_number,
 
                 ]);
 
                 return response([
-                    'code' => '400',
-                    'description' => 'Transaction was reversed',
+                    'code'          => '100',
+                    'description' => 'Failed to process transaction',
 
                 ]);
             }
@@ -1462,6 +1309,7 @@ class ReversalController extends Controller
         $br_job->txn_status = 'PENDING';
         $br_job->reversed = 'false';
         $br_job->status = 'DRAFT';
+        $br_job->version = 0;
         $br_job->br_reference = $request->transaction_batch_id;
         $br_job->txn_type = REVERSAL;
         $br_job->save();

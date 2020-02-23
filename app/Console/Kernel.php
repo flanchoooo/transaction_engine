@@ -21,6 +21,9 @@ class Kernel extends ConsoleKernel
         \App\Console\Commands\PenaltyDeduction::class,
         \App\Console\Commands\REVERSAL::class,
         \App\Console\Commands\FAILED::class,
+        \App\Console\Commands\FailedPurchase::class,
+        \App\Console\Commands\WalletSettlement::class,
+        \App\Console\Commands\FailedBalance::class
     ];
 
     /**
@@ -31,20 +34,28 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        $schedule->command('penalty_deduction:run')->cron('* * * * *')
+        $schedule->command('penalty_deduction:run')->cron('0 0 * * *')
             ->withoutOverlapping();
 
-        $schedule->command('failed:run')->cron('* * * * *')
+        $schedule->command('failed_purchase:run')->cron('* * * * *')
             ->withoutOverlapping();
 
-        $schedule->command('purchase:run')->cron('* * * * *')
+        $schedule->command('failed_balance:run')->cron(' 5 * * * *')
             ->withoutOverlapping();
 
-        $schedule->command('cash:run')->cron('* * * * *')
+        $schedule->command('failed_zipit:run')->cron('* * * * *')
             ->withoutOverlapping();
 
-        $schedule->command('reversal:run')->cron('* * * * *')
-            ->delay(1)
+        $schedule->command('purchase:run')->cron('2 * * * *')
+            ->withoutOverlapping();
+
+        $schedule->command('cash:run')->cron('3 * * * *')
+            ->withoutOverlapping();
+
+        $schedule->command('reversal:run')->cron('2 * * * *')
+            ->withoutOverlapping();
+
+        $schedule->command('wallet_settlement:run')->cron('* * * * *')
             ->withoutOverlapping();
 
 

@@ -3,15 +3,11 @@ namespace App\Http\Controllers;
 
 
 use App\Accounts;
-use App\BRJob;
 use App\Deduct;
 use App\Devices;
 use App\Employee;
-use App\Jobs\BalanceJob;
 use App\Jobs\NotifyBills;
 use App\Jobs\PostWalletPurchaseJob;
-use App\Jobs\PurchaseJob;
-use App\Jobs\ZipitReceive;
 use App\LuhnCards;
 use App\MDR;
 use App\Merchant;
@@ -44,179 +40,9 @@ class PurchaseOnUsController extends Controller
      * Index login controller
      *
      * When user success login will retrive callback as api_token
-     *
      */
 
-    public function purchase(){
-
-           $result =  BRJob::where('txn_status','!=',  'COMPLETED')
-              ->sharedLock()
-              ->get();
-
-            if($result == null){
-                return 'no record to process';
-            }
-
-           foreach ($result as $item){
-               if($item->txn_type == ZIPIT_RECEIVE){
-                   dispatch(new ZipitReceive($item->source_account,$item->amount /100,$item->tms_batch,$item->rrn,'Failed Zipit'));
-               }
-
-               if($item->txn_type == PURCHASE_OFF_US){
-                   dispatch(new PurchaseJob($item->source_account,$item->amount /100,$item->tms_batch,$item->rrn,'Failed Purchase.'));
-               }
-
-               if($item->txn_type == BALANCE_ENQUIRY_OFF_US){
-                   dispatch(new BalanceJob($item->source_account,$item->amount /100,$item->tms_batch,$item->rrn,'Failed Balance'));
-               }
-           }
-
-
-
-
-        if (!isset($items)) {
-            return response([
-                'code' => '01',
-                'description' => 'No transaction to process',
-            ]);
-        }
-
-
-        foreach ($items as $item){
-            $merchant_id = Devices::where('imei', $item->imei)->first();
-        return    $response = $this->purchase_deduction($item->transaction_id,$item->card_number,$merchant_id->merchant_id,$item->amount,$item->imei);
-            if($response["code"] == '00'){
-                echo 'Transaction successfully processed';
-
-            }
-        }
-
-    }
-
-
-
-
-
-    public function purchase_deduction($id,$card,$merchant_id,$amount,$imei)
-    {
-
-        $card_number = str_limit($card, 16, '');
-        $merchant_account = MerchantAccount::where('merchant_id',$merchant_id)->first();
-        $branch_id = substr($merchant_account->account_number, 0, 3);
-
-
-        //Balance Enquiry On Us Debit Fees
-        $fees_result = FeesCalculatorService::calculateFees(
-
-            $amount,
-            '0.00',
-            PURCHASE_BANK_X,
-            $merchant_id,$merchant_account->account_number
-
-        );
-
-
-        $zimswitch_account =ZIMSWITCH;
-        $revenue = REVENUE;
-
-        $debit_zimswitch_with_purchase_amnt = array(
-            'serial_no'             => '472100',
-            'our_branch_id'         => $branch_id,
-            'AccountID'             => $zimswitch_account,
-            'trx_description_id'    => '007',
-            'TrxDescription'        => 'SP | POS SALE RRN |'.$id,
-            'TrxAmount'             => '-' . $amount);
-
-
-        $credit_merchant_account = array(
-            'serial_no'             => '472100',
-            'our_branch_id'         => substr($merchant_account->account_number, 0, 3),
-            'AccountID'             => $merchant_account->account_number,
-            'trx_description_id'    => '008',
-            'TrxDescription'        => 'SP |POS SALE RRN | '.$id,
-            'TrxAmount'             => $amount);
-
-
-
-
-        $client = new Client();
-
-
-        try {
-            $result = $client->post(env('BASE_URL') . '/api/internal-transfer', [
-
-                'headers' => ['Authorization' => 'PURCHASE_OFF_US', 'Content-type' => 'application/json',],
-                'json' => [
-                    'bulk_trx_postings' => array(
-                        $debit_zimswitch_with_purchase_amnt,
-                        $credit_merchant_account,
-                    ),
-                ]
-            ]);
-
-           return $response = $result->getBody()->getContents();
-            $response = json_decode($result->getBody()->getContents());
-            if($response->code == '00'){
-                $rev =  $fees_result['mdr'] + $fees_result['acquirer_fee'];
-                $zimswitch_amount = $amount + $fees_result['acquirer_fee'];
-                $merchant_account_amount = $amount  - $fees_result['mdr'];
-
-                Transactions::create([
-
-                    'txn_type_id'         => PURCHASE_BANK_X,
-                    'revenue_fees'        => $rev,
-                    'interchange_fees'    => '0.00',
-                    'zimswitch_fee'       => '-'.$zimswitch_amount,
-                    'transaction_amount'  => $amount,
-                    'total_debited'       => $zimswitch_amount,
-                    'total_credited'      => $zimswitch_amount,
-                    'batch_id'            => $response->transaction_batch_id,
-                    'switch_reference'    => $id,
-                    'merchant_id'         => $merchant_id,
-                    'transaction_status'  => 1,
-                    'account_debited'     => $zimswitch_account,
-                    'pan'                 => $card_number,
-                    'merchant_account'    => $merchant_account_amount,
-                    'description'         => 'Transaction successfully processed.',
-
-                ]);
-
-                $auto_deduction = new Deduct();
-                $auto_deduction->imei = '000';
-                $auto_deduction->amount = $fees_result['mdr'];
-                $auto_deduction->source_account = $merchant_account->account_number;
-                $auto_deduction->destination_account = REVENUE;
-                $auto_deduction->txn_status = 'PENDING';
-                $auto_deduction->wallet_batch_id = $response->transaction_batch_id;
-                $auto_deduction->description = "Merchant service fee RRN | $id";
-                $auto_deduction->save();
-
-
-
-                return array(
-                    'code' => $response->code
-                );
-
-            }
-
-
-        } catch (ClientException $exception) {
-
-            return array(
-                'code' => '01'
-            );
-
-        }
-
-
-
-
-    }
-
-
-
-
-    public function purchases(Request $request)
+    public function purchase(Request $request)
     {
 
         $validator = $this->purchase_validation($request->all());
@@ -241,36 +67,26 @@ class PurchaseOnUsController extends Controller
         }
         $merchant_account   = MerchantAccount::where('merchant_id',$merchant_id->merchant_id)->first();
         $card_number = substr($request->card_number, 0, 16);
-        $card_details = LuhnCards::where('track_1', $card_number)->get()->first();
+        $source_account_number  = substr($request->account_number, 0, 3);
 
 
 
-        /*
-         * Wallet Code
-         */
 
 
-
-        if (isset($card_details->wallet_id)) {
+        if ($source_account_number == '263') {
              $merchant_id = Devices::where('imei', $request->imei)->first();
 
 
             DB::beginTransaction();
             try {
 
-                $fromQuery   = Wallet::whereId($card_details->wallet_id);
+                $fromQuery   = Wallet::whereMobile($request->account_number);
                  $fees_charged = FeesCalculatorService::calculateFees(
                     $request->amount /100, '0.00', PURCHASE_ON_US,
-                    $merchant_id->merchant_id
+                    $merchant_id->merchant_id,$request->account_number
                 );
 
-                 $response =   $this->switchLimitChecks(
-                    $request->account_number,
-                    $request->amount/100 ,
-                    $fees_charged['maximum_daily'],
-                    $card_number,$fees_charged['transaction_count'],
-                    $fees_charged['max_daily_limit']);
-
+                 $response =   $this->switchLimitChecks($request->account_number, $request->amount/100 , $fees_charged['maximum_daily'], $card_number,$fees_charged['transaction_count'], $fees_charged['max_daily_limit']);
                 if($response["code"] != '000'){
                     return response([
                         'code' => $response["code"],
@@ -285,15 +101,6 @@ class PurchaseOnUsController extends Controller
                     WalletTransactions::create([
 
                         'txn_type_id'       => PURCHASE_ON_US,
-                        'tax'               => '0.00',
-                        'revenue_fees'      => '0.00',
-                        'interchange_fees'  => '0.00',
-                        'zimswitch_fee'     => '0.00',
-                        'transaction_amount'=> '0.00',
-                        'total_debited'     => '0.00',
-                        'total_credited'    => '0.00',
-                        'batch_id'          => '',
-                        'switch_reference'  => '',
                         'merchant_id'       => $merchant_id->merchant_id,
                         'transaction_status'=> 0,
                         'pan'               => $card_number,
@@ -306,8 +113,8 @@ class PurchaseOnUsController extends Controller
                         'description' => 'Insufficient funds',
                     ]);
                 }
-                //Check Daily Spent
-                $daily_spent =  WalletTransactions::where('account_debited', $request->account_number)
+
+                /*$daily_spent =  WalletTransactions::where('account_debited', $request->account_number)
                     ->where('created_at', '>', Carbon::now()->subDays(1))
                     ->sum('transaction_amount');
 
@@ -343,16 +150,6 @@ class PurchaseOnUsController extends Controller
                 if( $total_count >= $fees_charged['transaction_count'] ){
                     Transactions::create([
                         'txn_type_id'         => PURCHASE_ON_US,
-                        'tax'                 => '0.00',
-                        'revenue_fees'        => '0.00',
-                        'interchange_fees'    => '0.00',
-                        'zimswitch_fee'       => '0.00',
-                        'transaction_amount'  => '0.00',
-                        'total_debited'       => '0.00',
-                        'total_credited'      => '0.00',
-                        'batch_id'            => '',
-                        'switch_reference'    => '',
-                        'merchant_id'         => '',
                         'transaction_status'  => 0,
                         'account_debited'     => $request->br_account,
                         'pan'                 => '',
@@ -365,12 +162,10 @@ class PurchaseOnUsController extends Controller
                     ]);
                 }
 
+                */
 
-                $amount = $fees_charged['acquirer_fee'];
+
                 $source_deductions = $fees_charged['tax'] + $fees_charged['acquirer_fee'] + $request->amount /100;
-
-
-                //Debit Purchaser
                 $fromAccount->balance -= $source_deductions;
                 $fromAccount->save();
 
@@ -380,7 +175,7 @@ class PurchaseOnUsController extends Controller
                 $transaction                    = new WalletTransactions();
                 $transaction->txn_type_id       = PURCHASE_ON_US;
                 $transaction->tax               =  $fees_charged['tax'];
-                $transaction->revenue_fees      =  $amount;
+                $transaction->revenue_fees      =  $fees_charged['acquirer_fee'];
                 $transaction->zimswitch_fee     = '0.00';
                 $transaction->transaction_amount= $request->amount /100;
                 $transaction->total_debited     = $fees_charged['fees_charged'] +  $request->amount /100;
@@ -398,45 +193,51 @@ class PurchaseOnUsController extends Controller
                //Revenue Settlement
                 $auto_deduction = new Deduct();
                 $auto_deduction->imei = '000';
-                $auto_deduction->amount = $amount;
+                $auto_deduction->wallet_batch_id = $reference;
+                $auto_deduction->amount = $fees_charged['acquirer_fee'];
                 $auto_deduction->merchant = HQMERCHANT;
                 $auto_deduction->source_account = TRUST_ACCOUNT;
                 $auto_deduction->destination_account = REVENUE;
-                $auto_deduction->txn_status = 'PENDING';
-                $auto_deduction->description = 'Wallet settlement on purchase:'. $request->account_number.' '.$reference;
+                $auto_deduction->txn_status = 'WALLET PENDING';
+                $auto_deduction->description = 'WALLET| Fees settlement on purchase on us | '. $request->account_number.' '.$reference;
                 $auto_deduction->save();
 
                 //Tax Settlement
                 $auto_deduction = new Deduct();
                 $auto_deduction->imei = '000';
                 $auto_deduction->amount = $fees_charged['tax'];
+                $auto_deduction->wallet_batch_id = $reference;
                 $auto_deduction->merchant = HQMERCHANT;
                 $auto_deduction->source_account = TRUST_ACCOUNT;
                 $auto_deduction->destination_account = TAX;
-                $auto_deduction->txn_status = 'PENDING';
-                $auto_deduction->description = 'Wallet settlement on purchase:'. $request->account_number.' '.$reference;
+                $auto_deduction->txn_status = 'WALLET PENDING';
+                $auto_deduction->description =  'WALLET| Tax settlement on purchase on us | '. $request->account_number.' '.$reference;
                 $auto_deduction->save();
 
                 //Merchant Settlement
                 $auto_deduction = new Deduct();
                 $auto_deduction->imei = '000';
                 $auto_deduction->amount = $request->amount /100;
+                $auto_deduction->wallet_batch_id = $reference;
                 $auto_deduction->merchant = HQMERCHANT;
                 $auto_deduction->source_account = TRUST_ACCOUNT;
                 $auto_deduction->destination_account = $merchant_account->account_number;
-                $auto_deduction->txn_status = 'PENDING';
-                $auto_deduction->description = 'Wallet settlement on purchase:'. $request->account_number.' '.$reference;
+                $auto_deduction->txn_status = 'WALLET PENDING';
+                $auto_deduction->description = 'WALLET| Merchant settlement on purchase on us | '. $request->account_number.' '.$reference;
                 $auto_deduction->save();
 
-                //MDR Deduction
-                $mdr_deduction = new MDR();
-                $mdr_deduction->amount = $fees_charged['mdr'];
-                $mdr_deduction->imei = $request->imei;
-                $mdr_deduction->merchant = $merchant_id->merchant_id;
-                $mdr_deduction->source_account = $merchant_account->account_number;
-                $mdr_deduction->txn_status = 'PENDING';
-                $mdr_deduction->batch_id = $reference;
-                $mdr_deduction->save();
+
+                $auto_deduction = new Deduct();
+                $auto_deduction->imei = '000';
+                $auto_deduction->amount = $fees_charged['mdr'];
+                $auto_deduction->wallet_batch_id = $reference;
+                $auto_deduction->merchant = HQMERCHANT;
+                $auto_deduction->source_account = $merchant_account->account_number;
+                $auto_deduction->destination_account = REVENUE;
+                $auto_deduction->txn_status = 'WALLET PENDING';
+                $auto_deduction->description = 'WALLET | Merchant service fees | '. $request->account_number.' '.$reference;
+                $auto_deduction->save();
+
 
 
                /* $merchant_name = $merchant->name;
@@ -750,7 +551,6 @@ class PurchaseOnUsController extends Controller
                     ]);
 
                 } else {
-                    Log::debug('Account Number:'.$request->account_number.' '. $e->getMessage());
                     Transactions::create([
                         'txn_type_id'         => PURCHASE_ON_US,
                         'tax'                 => '0.00',
@@ -1014,6 +814,7 @@ class PurchaseOnUsController extends Controller
 
 
     }
+
 
     protected function purchase_validation(Array $data)
     {

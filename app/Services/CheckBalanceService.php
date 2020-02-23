@@ -8,6 +8,7 @@
 
 namespace App\Services;
 
+use App\Transactions;
 use GuzzleHttp;
 use GuzzleHttp\Client;
 use http\Env\Request;
@@ -24,54 +25,50 @@ class CheckBalanceService
         {
 
 
-        $authentication  = 'Test';
+
         $client = new Client();
         $result = $client->post(env('BASE_URL') . '/api/accounts/balance', [
 
-            'headers' => ['Authorization' => $authentication, 'Content-type' => 'application/json',],
+            'headers' => ['Authorization' => 'Balance', 'Content-type' => 'application/json',],
             'json' => [
                 'account_number' => $account_number,
             ]
         ]);
 
+
+       //return $balance_response = $result->getBody()->getContents();
         $balance_response = json_decode($result->getBody()->getContents());
 
+            if($balance_response->code != '00'){
+                return array(
+                    'code'              => '100',
+                    'description'       => 'Invalid BR account',
+                );
+
+            }
         return array(
-
-                'code'              => '00',
+                'code'              => '000',
                 'available_balance' => $balance_response->available_balance,
-                'ledger_balance'    => $balance_response->available_balance,
-                'token'              => $authentication,
-
         );
 
 
 
         }catch (RequestException $e) {
-
             if ($e->hasResponse()) {
-           $exception = (string)$e->getResponse()->getBody();
-
-
-                Log::debug('Account Number:'.$account_number.' '.$exception);
-
+                $exception = (string)$e->getResponse()->getBody();
                 return array(
-                    'code'          => '100',
-                    'description'   => 'BR could not process your request.');
+                    'code'              => '100',
+                    'description'       => '1. Failed to reach CBS',
+                );
+            } else {
+                return array(
+                    'code'              => '100',
+                    'description'       => '2. Failed to reach CBS',
+                );
+
+            }
 
         }
-
-        else {
-
-
-            Log::debug('Account Number:'.$account_number.' '.$e->getMessage());
-
-            return array(
-                'code'          => '100',
-                'description'   => 'BR could not process your request.');
-
-        }
-    }
 
 
     }

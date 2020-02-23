@@ -206,15 +206,12 @@ class WalletBillPaymentController extends Controller
 
         //Class of Service Checks
         $this->limit_checker($request->source_mobile,$source_mobile->wallet_cos_id);
-
-
         if(!isset($request->agent_mobile)){
              $wallet_fees = WalletFeesCalculatorService::calculateFees(
                 $transaction_amount,
                 $request->bill_payment_id
 
             );
-
 
              $account =  BRAccountID::where('Mobile', $request->source_mobile)->first();
            if(isset($account)) {
@@ -272,50 +269,14 @@ class WalletBillPaymentController extends Controller
         try {
 
             $source      = Wallet::whereMobile($source_mobile);
-            $revenue    = Wallet::whereMobile(WALLET_REVENUE);
-            $tax        = Wallet::whereMobile(WALLET_TAX);
             $biller     = Wallet::whereMobile($biller_mobile);
 
             $source_account = $source->lockForUpdate()->first();
-            if($source_account->wallet_type == 'BILLER'){
-                $tax_account = $tax->lockForUpdate()->first();
-                $tax_account->balance += $tax_fee;
-                $tax_account->save();
-
-                $revenue_account = $revenue->lockForUpdate()->first();
-                $revenue_account->balance += $fee;
-                $revenue_account->save();
-
-                $source_account = $source->lockForUpdate()->first();
-                $source_account->balance-= $transaction_amount + $fee;
-                $source_account->save();
+            if($bill_payment_id == BANK_TO_WALLET){
 
                 $biller_account =  $biller->lockForUpdate()->first();
                 $biller_account->balance += $transaction_amount;
                 $biller_account->save();
-
-                $source_      = $source->lockForUpdate()->first();
-                $source_->balance += $transaction_amount;
-                $source_->save();
-
-
-                $agent_new_balance              = $source_account->balance;
-                $transaction                    = new WalletTransactions();
-                $transaction->txn_type_id       = $bill_payment_id;
-                $transaction->tax               =  $tax_fee;
-                $transaction->revenue_fees      = '0.00';
-                $transaction->zimswitch_fee     = '0.00';
-                $transaction->transaction_amount= $transaction_amount;
-                $transaction->total_debited     = $transaction_amount;
-                $transaction->account_debited   = $source_mobile;
-                $transaction->total_credited    = '0.00';
-                $transaction->switch_reference  = $reference;
-                $transaction->batch_id          = $reference;
-                $transaction->transaction_status= 1;
-                $transaction->account_credited  = $biller_mobile;
-                $transaction->balance_after_txn = $agent_new_balance;
-                $transaction->description       = 'Transaction successfully processed.';
-                $transaction->save();
 
                 $biller_balance                 = $biller_account->balance;
                 $transaction                    = new WalletTransactions();
@@ -335,68 +296,19 @@ class WalletBillPaymentController extends Controller
                 $transaction->description       = 'Transaction successfully processed.';
                 $transaction->save();
 
-                $value_management                   = new ManageValue();
-                $value_management->account_number   = $biller_mobile;
-                $value_management->amount           = $transaction_amount;
-                $value_management->txn_type         = CREATE_VALUE;
-                $value_management->state            = 1;
-                $value_management->initiated_by     = 3;
-                $value_management->validated_by     = 3;
-                $value_management->narration        = 'Create Value';
-                $value_management->description      = 'Create Value on trust account funding'. $reference ;
-                $value_management->save();
-
-
                 DB::commit();
-
                 return array(
                     'code' => '00'
                 );
 
 
-                /* $amount = money_format(CURRENCY.'%i', $this->transaction_amount);
-                 $sender_balance = money_format(CURRENCY.'%i', $source_account->balance);
-                 $bill = TransactionType::find($this->bill_payment_id)->name;
-
-
-                 SmsNotificationService::send(
-                     '1',
-                     '',
-                     '',
-                     '',
-                     '',
-                     $this->source_mobile,
-                     "You have successfully paid for $bill worth $amount, your new balance is : $sender_balance Thank you for using ". env('SMS_SENDER'). ' .'
-
-                 );
-
-                */
-
             }
 
+
             if($source_account->wallet_type != 'BILLER'){
-
-               /* $tax_account = $tax->lockForUpdate()->first();
-                $tax_account->balance += $tax_fee;
-                $tax_account->save();
-
-                $revenue_account = $revenue->lockForUpdate()->first();
-                $revenue_account->balance += $fee;
-                $revenue_account->save();
-               */
-
                 $source_account = $source->lockForUpdate()->first();
                 $source_account->balance-= $transaction_amount + $fee + $tax_fee;
                 $source_account->save();
-
-                $biller_account =  $biller->lockForUpdate()->first();
-                $biller_account->balance += $transaction_amount;
-                $biller_account->save();
-
-                $biller_account =  $biller->lockForUpdate()->first();
-                $biller_account->balance -= $transaction_amount;
-                $biller_account->save();
-
 
 
                 $agent_new_balance              = $source_account->balance;
@@ -417,45 +329,7 @@ class WalletBillPaymentController extends Controller
                 $transaction->description       = 'Transaction successfully processed.';
                 $transaction->save();
 
-                $biller_balance                 = $biller_account->balance;
-                $transaction                    = new WalletTransactions();
-                $transaction->txn_type_id       = $bill_payment_id;
-                $transaction->tax               = '0.00';
-                $transaction->revenue_fees      = '0.00';
-                $transaction->zimswitch_fee     = '0.00';
-                $transaction->transaction_amount= $transaction_amount;
-                $transaction->total_debited     = '0.00';
-                $transaction->total_credited    = $transaction_amount;
-                $transaction->switch_reference  = $bill_reference;
-                $transaction->batch_id          = $reference;
-                $transaction->transaction_status= 1;
-                $transaction->account_debited   = $source_mobile;
-                $transaction->account_credited  = $biller_mobile;
-                $transaction->balance_after_txn = $biller_balance;
-                $transaction->description       = 'Transaction successfully processed.';
-                $transaction->save();
 
-                $value_management                   = new ManageValue();
-                $value_management->account_number   = $biller_mobile;
-                $value_management->amount           = $transaction_amount;
-                $value_management->txn_type         = DESTROY_E_VALUE;
-                $value_management->state            = 1;
-                $value_management->initiated_by     = 3;
-                $value_management->validated_by     = 3;
-                $value_management->narration        = 'Destroy E-Value';
-                $value_management->description      = 'Destroy E-Value on bill payment settlment'. $reference ;
-                $value_management->save();
-
-                $value_management                   = new ManageValue();
-                $value_management->account_number   = $biller_mobile;
-                $value_management->amount           = $transaction_amount;
-                $value_management->txn_type         = DESTROY_E_VALUE;
-                $value_management->state            = 1;
-                $value_management->initiated_by     = 3;
-                $value_management->validated_by     = 3;
-                $value_management->narration        = 'Destroy E-Value';
-                $value_management->description      = 'Destroy E-Value on bill payment settlment'. $reference ;
-                $value_management->save();
 
                 //BR Settlement
                /* $auto_deduction = new Deduct();
@@ -517,18 +391,6 @@ class WalletBillPaymentController extends Controller
             DB::rollBack();
             WalletTransactions::create([
                 'txn_type_id'       => $bill_payment_id,
-                'tax'               => '0.00',
-                'revenue_fees'      => '0.00',
-                'interchange_fees'  => '0.00',
-                'zimswitch_fee'     => '0.00',
-                'transaction_amount'=> '0.00',
-                'total_debited'     => '0.00',
-                'total_credited'    => '0.00',
-                'batch_id'          => '',
-                'switch_reference'  => '',
-                'merchant_id'       => '',
-                'transaction_status'=> 0,
-                'pan'               => '',
                 'description'       => 'Transaction was reversed for mobile:' . $source_mobile,
             ]);
 

@@ -45,46 +45,27 @@ class BalanceOnUsController extends Controller
                 return response()->json(['code' => '99', 'description' => $validator->errors()]);
             }
 
-            /*
-             * Declarations
-             */
-            $card_number = substr($request->card_number, 0, 16);
-            $card_details = LuhnCards::where('track_1', $card_number)->get()->first();
+            $card_number            = substr($request->card_number, 0, 16);
+            $source_account_number  = substr($request->account_number, 0, 3);
 
-            /*
-             * Check employees if the parameter is set.
-             */
 
 
             //Wallet Code
-            if (isset($card_details->wallet_id)) {
-
+            if ($source_account_number == '263') {
                 $merchant_id = Devices::where('imei', $request->imei)->first();
                 DB::beginTransaction();
                 try {
 
-                    $fromQuery = Wallet::whereId($card_details->wallet_id);
-                    $toQuery = Wallet::whereMobile(WALLET_REVENUE);
-
-
+                    $fromQuery = Wallet::whereMobile($request->account_number);
                     $fees_charged = FeesCalculatorService::calculateFees(
                         '0.00', '0.00', BALANCE_ON_US,
-                        $merchant_id->merchant_id
+                        $merchant_id->merchant_id,$request->account_number
                     );
 
                     $fromAccount = $fromQuery->lockForUpdate()->first();
                     if ($fees_charged['minimum_balance'] > $fromAccount->balance) {
                         WalletTransactions::create([
                             'txn_type_id'       => BALANCE_ON_US,
-                            'tax'               => '0.00',
-                            'revenue_fees'      => '0.00',
-                            'interchange_fees'  => '0.00',
-                            'zimswitch_fee'     => '0.00',
-                            'transaction_amount'=> '0.00',
-                            'total_debited'     => '0.00',
-                            'total_credited'    => '0.00',
-                            'batch_id'          => '',
-                            'switch_reference'  => '',
                             'merchant_id'       => $merchant_id->merchant_id,
                             'transaction_status'=> 0,
                             'pan'               => $card_number,
@@ -99,19 +80,11 @@ class BalanceOnUsController extends Controller
 
                     //Fee Deductions.
                     $amount = $fees_charged['acquirer_fee'];
-                    $toAccount = $toQuery->lockForUpdate()->first();
-                    $toAccount->balance += $amount;
-                    $toAccount->save();
-
                     $fromAccount->balance -= $amount;
                     $fromAccount->save();
 
-                    $toAccount->balance -= $amount;
-                    $toAccount->save();
-
                     $source_new_balance             = $fromAccount->balance;
-                    $time_stamp                     = Carbon::now()->format('ymdhis');
-                    $reference                      = '18' . $time_stamp;
+                    $reference                      = $this->genRandomNumber();
                     $transaction                    = new WalletTransactions();
                     $transaction->txn_type_id       = BALANCE_ON_US;
                     $transaction->tax               = '0.00';
@@ -131,34 +104,21 @@ class BalanceOnUsController extends Controller
                     $transaction->description       = 'Transaction successfully processed.';
                     $transaction->save();
 
-
-                    $value_management                   = new ManageValue();
-                    $value_management->account_number   = WALLET_REVENUE;
-                    $value_management->amount           = $amount;
-                    $value_management->txn_type         = DESTROY_E_VALUE;
-                    $value_management->state            = 1;
-                    $value_management->initiated_by     = 3;
-                    $value_management->validated_by     = 3;
-                    $value_management->narration        = 'Destroy E-Value';
-                    $value_management->description      = 'Destroy E-Value on balance fee'. $request->account_number. 'reference:'.$reference ;
-                    $value_management->save();
-
                     //BR Settlement
                     $auto_deduction = new Deduct();
                     $auto_deduction->imei = '000';
                     $auto_deduction->amount = $amount;
+                    $auto_deduction->wallet_batch_id = $reference;
                     $auto_deduction->merchant = HQMERCHANT;
                     $auto_deduction->source_account = TRUST_ACCOUNT;
                     $auto_deduction->destination_account = REVENUE;
-                    $auto_deduction->txn_status = 'PENDING';
-                    $auto_deduction->description = 'Wallet Settlement on balance enquiry';
+                    $auto_deduction->txn_status = 'WALLET PENDING';
+                    $auto_deduction->description = 'WALLET | Balance enquiry  on us | '.$request->account_number;
                     $auto_deduction->save();
 
 
 
                     DB::commit();
-
-
                     $available_balance = number_format((float)$source_new_balance, 2, '', '');
                     /*$new_balance = money_format('$%i', $source_new_balance);
 
@@ -370,6 +330,22 @@ class BalanceOnUsController extends Controller
 
     }
 
+    public function genRandomNumber($length = 7, $formatted = false){
+        $nums = '0123456789';
+
+        // First number shouldn't be zero
+        $out = $nums[ mt_rand(1, strlen($nums) - 1) ];
+
+        // Add random numbers to your string
+        for ($p = 0; $p < $length - 1; $p++)
+            $out .= $nums[ mt_rand(0, strlen($nums) - 1) ];
+
+        // Format the output with commas if needed, otherwise plain output
+        if ($formatted)
+            return number_format($out);
+
+        return $out;
+    }
 
     protected function balance_enquiry(Array $data){
         return Validator::make($data, [
