@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 
 use App\Accounts;
+use App\BRJob;
 use App\Deduct;
 use App\Jobs\Notify;
 use App\Jobs\NotifyBills;
@@ -15,6 +16,7 @@ use App\ManageValue;
 use App\Services\FeesCalculatorService;
 use App\Services\SmsNotificationService;
 use App\Services\TsambaService;
+use App\Services\UniqueTxnId;
 use App\Services\WalletFeesCalculatorService;
 use App\TransactionType;
 use App\Wallet;
@@ -96,6 +98,13 @@ class WalletSendMoneyController extends Controller
         if ($validator->fails()) {
             return response()->json(['code' => '99', 'description' => $validator->errors()]);
 
+        }
+
+        if(WALLET_STATUS != 'ACTIVE'){
+            return response([
+                'code'          => '100',
+                'description'   => 'Wallet service is temporarily unavailable',
+            ]);
         }
 
         if($request->source_mobile == $request->destination_mobile ){
@@ -181,7 +190,7 @@ class WalletSendMoneyController extends Controller
                 $receiving_wallet->save();
 
                 $source_new_balance             = $fromAccount->balance;
-                $reference                      = $this->genRandomNumber();
+                $reference                      = UniqueTxnId::transaction_id();
                 $transaction                    = new WalletTransactions();
                 $transaction->txn_type_id       = SEND_MONEY;
                 $transaction->tax               =  $wallet_fees['tax'];
@@ -217,28 +226,33 @@ class WalletSendMoneyController extends Controller
                 $transaction->description       = 'Transaction successfully processed.';
                 $transaction->save();
 
-                $auto_deduction = new Deduct();
-                $auto_deduction->imei = '000';
-                $auto_deduction->amount = $wallet_fees['tax'];
-                $auto_deduction->merchant = HQMERCHANT;
-                $auto_deduction->source_account = TRUST_ACCOUNT;
-                $auto_deduction->destination_account = TAX;
-                $auto_deduction->txn_status = 'WALLET PENDING';
-                $auto_deduction->wallet_batch_id = $reference;
-                $auto_deduction->description = "WALLET |Tax settlement |$reference | $request->source_mobile";
-                $auto_deduction->save();
 
 
-                $auto_deduction = new Deduct();
-                $auto_deduction->imei = '000';
-                $auto_deduction->amount = $wallet_fees['fee'];
-                $auto_deduction->merchant = HQMERCHANT;
-                $auto_deduction->source_account = TRUST_ACCOUNT;
-                $auto_deduction->destination_account = REVENUE;
-                $auto_deduction->txn_status = 'WALLET PENDING';
-                $auto_deduction->wallet_batch_id = $reference;
-                $auto_deduction->description ="WALLET | Revenue settlement |$reference | $request->source_mobile";
-                $auto_deduction->save();
+                $br_job = new BRJob();
+                $br_job->txn_status = 'PENDING';
+                $br_job->amount = $wallet_fees['tax'];
+                $br_job->source_account = TRUST_ACCOUNT;
+                $br_job->destination_account = TAX;
+                $br_job->status = 'DRAFT';
+                $br_job->version = 0;
+                $br_job->tms_batch = $reference;
+                $br_job->narration = "WALLET |Tax settlement |$reference | $request->source_mobile";
+                $br_job->rrn =$reference;
+                $br_job->txn_type = WALLET_SETTLEMENT;
+                $br_job->save();
+
+                $br_job = new BRJob();
+                $br_job->txn_status = 'PENDING';
+                $br_job->amount = $wallet_fees['fee'];
+                $br_job->source_account = TRUST_ACCOUNT;
+                $br_job->destination_account = REVENUE;
+                $br_job->status = 'DRAFT';
+                $br_job->version = 0;
+                $br_job->tms_batch = $reference;
+                $br_job->narration = "WALLET | Revenue settlement |$reference | $request->source_mobile";
+                $br_job->rrn =$reference;
+                $br_job->txn_type = WALLET_SETTLEMENT;
+                $br_job->save();
 
 
                DB::commit();
@@ -334,22 +348,7 @@ class WalletSendMoneyController extends Controller
 
     }
 
-    public function genRandomNumber($length = 10, $formatted = false){
-        $nums = '0123456789';
 
-        // First number shouldn't be zero
-        $out = $nums[ mt_rand(1, strlen($nums) - 1) ];
-
-        // Add random numbers to your string
-        for ($p = 0; $p < $length - 1; $p++)
-            $out .= $nums[ mt_rand(0, strlen($nums) - 1) ];
-
-        // Format the output with commas if needed, otherwise plain output
-        if ($formatted)
-            return number_format($out);
-
-        return $out;
-    }
 
     protected function wallet_preauth(Array $data)
     {

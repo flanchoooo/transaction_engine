@@ -54,6 +54,7 @@ class WalletSettlement extends Command
      */
     public function handle()
     {
+        
         $mdr = Deduct::where('txn_status', 'WALLET PENDING')
                                     ->sharedLock()
                                     ->get();
@@ -80,10 +81,17 @@ class WalletSettlement extends Command
             return 'OK';
         }
 
+        $accounts  = strlen($account);
+        if($accounts <= 8){
+             $branch_id = substr($destination,0,3);
+        }else{
+             $branch_id = substr($account,0,3);
+        }
+
 
         $account_debit = array(
             'serial_no'             => '472100',
-            'our_branch_id'         =>  substr($account, 0, 3),
+            'our_branch_id'         =>  $branch_id,
             'account_id'            => $account,
             'trx_description_id'    => '007',
             'trx_description'       => $description,
@@ -91,7 +99,7 @@ class WalletSettlement extends Command
 
         $bank_revenue_credit    = array(
             'serial_no'             => '472100',
-            'our_branch_id'         => substr($account, 0, 3),
+            'our_branch_id'         => $branch_id,
             'account_id'            => $destination,
             'trx_description_id'    => '008',
             'trx_description'       => $description,

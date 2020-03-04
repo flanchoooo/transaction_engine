@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Accounts;
+use App\BRJob;
 use App\Deduct;
 use App\Devices;
 use App\Jobs\NotifyBills;
@@ -50,9 +51,9 @@ class Cash extends Command
      *
      * @return mixed
      */
-    public function purchase_off_us(){
+    public function handle(){
 
-        $items = PendingTxn::where('transaction_type_id', PURCHASE_CASH_BACK_OFF_US)
+        $items = PendingTxn::where('transaction_type_id', PURCHASE_CASH_BACK_BANK_X)
             ->where('status', 'DRAFT')
             ->get();
 
@@ -63,16 +64,51 @@ class Cash extends Command
             ]);
         }
 
+
         foreach ($items as $item){
+            LoggingService::message('Successfully dispatched merchant settlement request');
             $merchant_id = Devices::where('imei', $item->imei)->first();
-            $response = $this->purchase_deduction($item->transaction_id,$item->card_number,$merchant_id->merchant_id,$item->amount,$item->cash_back_amount,$item->imei);
-            if($response["code"] == '00'){
-                LoggingService::message('Merchant settled successfully');
-                $item->status= 'COMPLETED';
-                $item->save();
-                echo $merchant_id->merchant_id.' '. 'Merchant settled successfully';
-            }
+            $merchant_account = MerchantAccount::where('merchant_id',$merchant_id->merchant_id)->first();
+            $fees_result = FeesCalculatorService::calculateFees(
+                $item->amount,
+                '0.00',
+                PURCHASE_CASH_BACK_OFF_US,
+                $merchant_id->merchant_id,$merchant_account->account_number
+            );
+
+            $br_job = new BRJob();
+            $br_job->txn_status = 'PENDING';
+            $br_job->amount = $item->amount;
+            $br_job->source_account = $merchant_account->account_number;
+            $br_job->status = 'DRAFT';
+            $br_job->version = 0;
+            $br_job->tms_batch = $item->transaction_id;
+            $br_job->narration = $item->imei;
+            $br_job->cash = $item->cash_back_amount;
+            $br_job->rrn = $item->transaction_id;
+            $br_job->txn_type = PURCHASE_CASH_BACK_BANK_X;
+            $br_job->save();
+
+            $br_jobs = new BRJob();
+            $br_jobs->txn_status = 'PENDING';
+            $br_jobs->amount = $fees_result['mdr'];
+            $br_jobs->source_account = $merchant_account->account_number;
+            $br_jobs->status = 'DRAFT';
+            $br_jobs->version = 0;
+            $br_jobs->tms_batch = $item->transaction_id;
+            $br_jobs->narration = $item->imei;
+            $br_jobs->rrn = $item->transaction_id;
+            $br_jobs->txn_type = MDR_DEDUCTION;
+            $br_jobs->save();
+            $item->status= 'COMPLETED';
+            $item->save();
+
         }
+
+
+
+
+
 
     }
 

@@ -62,6 +62,8 @@ class FAILED extends Command
     {
 
 
+        return 'OK';
+
         $result = BRJob::where('txn_status', 'FAILED')
             ->where('txn_type', ZIPIT_RECEIVE)
             ->sharedLock()

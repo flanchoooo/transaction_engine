@@ -4,15 +4,20 @@ namespace App\Http\Controllers;
 
 
 
+use App\BRJob;
 use App\Deduct;
 use App\Devices;
 use App\Jobs\NotifyBills;
 use App\LuhnCards;
 use App\ManageValue;
 use App\Merchant;
+use App\PenaltyDeduction;
+use App\Services\BRBalanceService;
 use App\Services\DeductBalanceFeesOnUs;
 use App\Services\FeesCalculatorService;
+use App\Services\LoggingService;
 use App\Services\TokenService;
+use App\Services\UniqueTxnId;
 use App\Transactions;
 use App\Wallet;
 use App\WalletTransactions;
@@ -38,8 +43,6 @@ class BalanceOnUsController extends Controller
      * @return array|\Illuminate\Http\JsonResponse
      */
     public function balance(Request $request){
-
-
             $validator = $this->balance_enquiry($request->all());
             if ($validator->fails()) {
                 return response()->json(['code' => '99', 'description' => $validator->errors()]);
@@ -48,10 +51,15 @@ class BalanceOnUsController extends Controller
             $card_number            = substr($request->card_number, 0, 16);
             $source_account_number  = substr($request->account_number, 0, 3);
 
-
-
             //Wallet Code
             if ($source_account_number == '263') {
+                $reference = UniqueTxnId::transaction_id();
+                if(WALLET_STATUS != 'ACTIVE'){
+                    return response([
+                        'code' => '100',
+                        'description' => 'Wallet service is temporarily unavailable',
+                    ]);
+                }
                 $merchant_id = Devices::where('imei', $request->imei)->first();
                 DB::beginTransaction();
                 try {
@@ -84,7 +92,6 @@ class BalanceOnUsController extends Controller
                     $fromAccount->save();
 
                     $source_new_balance             = $fromAccount->balance;
-                    $reference                      = $this->genRandomNumber();
                     $transaction                    = new WalletTransactions();
                     $transaction->txn_type_id       = BALANCE_ON_US;
                     $transaction->tax               = '0.00';
@@ -104,18 +111,18 @@ class BalanceOnUsController extends Controller
                     $transaction->description       = 'Transaction successfully processed.';
                     $transaction->save();
 
-                    //BR Settlement
-                    $auto_deduction = new Deduct();
-                    $auto_deduction->imei = '000';
-                    $auto_deduction->amount = $amount;
-                    $auto_deduction->wallet_batch_id = $reference;
-                    $auto_deduction->merchant = HQMERCHANT;
-                    $auto_deduction->source_account = TRUST_ACCOUNT;
-                    $auto_deduction->destination_account = REVENUE;
-                    $auto_deduction->txn_status = 'WALLET PENDING';
-                    $auto_deduction->description = 'WALLET | Balance enquiry  on us | '.$request->account_number;
-                    $auto_deduction->save();
-
+                    $br_job = new BRJob();
+                    $br_job->txn_status = 'PENDING';
+                    $br_job->amount = $amount;
+                    $br_job->source_account = TRUST_ACCOUNT;
+                    $br_job->destination_account = REVENUE;
+                    $br_job->status = 'DRAFT';
+                    $br_job->version = 0;
+                    $br_job->tms_batch = $reference;
+                    $br_job->narration = "WALLET | Balance enquiry  on us | '.$request->account_number";
+                    $br_job->rrn =$reference;
+                    $br_job->txn_type = WALLET_SETTLEMENT;
+                    $br_job->save();
 
 
                     DB::commit();
@@ -182,109 +189,85 @@ class BalanceOnUsController extends Controller
             }
 
 
+            $reference = UniqueTxnId::transaction_id();
+            $fees_result = FeesCalculatorService::calculateFees(
+            '0.00',
+            '0.00',
+            BALANCE_ON_US,
+            HQMERCHANT, $request->account_number
+
+        );
 
 
-            /*
-             * Peform Balance enquiry & return valid responses.
-             */
+        $balance_res = BRBalanceService::br_balance($request->account_number);
+        if($balance_res["code"] != '000'){
+            return response([
+                'code' => $balance_res["code"],
+                'description' => $balance_res["description"],
+            ]);
+        }
 
-            if (isset($request->imei)) {
-                    $merchant_id    = Devices::where('imei', $request->imei)->first();
-                    $balance_result = $this->checkBalance($request->account_number);
-                     if($balance_result['code'] == '01'){
-                    return response([
-                        'code' => '100',
-                        'description' => 'Invalid BR Account',
+        $available_balance =  round($balance_res["available_balance"], 2) * 100;
+        if($available_balance == 0){
+            return response([
+                'code'              => '000',
+                'currency'          => CURRENCY,
+                'available_balance' => $available_balance,
+                'ledger_balance'    => $available_balance,
+            ]);
 
-                    ]);
+        }
 
-                }
+        if($fees_result['fees_charged'] > $available_balance ){
+            LoggingService::message('Insufficient funds'.$request->account_number);
+            return response([
+                'code'              => '000',
+                'available_balance' => "$available_balance",
+                'ledger_balance'    => "$available_balance",
+                'batch_id'          => "$reference",
+                'description'       => "SUCCESS",
+            ]);
+        }
 
-                    if (isset($balance_result)) {
-                         $fees_result = FeesCalculatorService::calculateFees(
-                            '0.00',
-                            '0.00',
-                            BALANCE_ON_US,
-                            $merchant_id->merchant_id,$request->account_number
-                        );
+        $br_job = new BRJob();
+        $br_job->txn_status = 'PENDING';
+        $br_job->amount = $fees_result['fees_charged'];
+        $br_job->source_account = $request->account_number;
+        $br_job->status = 'DRAFT';
+        $br_job->version = 0;
+        $br_job->tms_batch = $reference;
+        $br_job->narration = $request->narration;
+        $br_job->rrn =$reference;
+        $br_job->txn_type = BALANCE_ON_US;
+        $br_job->save();
 
-
-                        if ($balance_result['available_balance'] < $fees_result['minimum_balance']) {
-                            Transactions::create([
-                                'txn_type_id'       => BALANCE_ON_US,
-                                'tax'               => '0.00',
-                                'revenue_fees'      => '0.00',
-                                'interchange_fees'  => '0.00',
-                                'zimswitch_fee'     => '0.00',
-                                'transaction_amount'=> '0.00',
-                                'total_debited'     => '0.00',
-                                'total_credited'    => '0.00',
-                                'batch_id'          => '',
-                                'switch_reference'  => '',
-                                'merchant_id'       => $merchant_id->merchant_id,
-                                'transaction_status'=> 0,
-                                'account_debited'   => $request->account_number,
-                                'pan'               => $card_number,
-                                'description'       => 'Insufficient funds',
-
-                            ]);
-
-                            return response([
-                                'code' => '116',
-                                'description' => 'Insufficient Funds',
-
-                            ]);
-
-                        }
-
-                    }
-
-
-                    $batch =  DeductBalanceFeesOnUs::deduct($request->account_number, $fees_result['fees_charged'], $merchant_id->merchant_id, $card_number);
-                    if( $batch['code'] != '00'){
-                        return response([
-
-                            'code'=> $batch['code'],
-                            'description'=> $batch['description']
+        Transactions::create([
+            'txn_type_id'         => BALANCE_ON_US,
+            'tax'                 => '0.00',
+            'revenue_fees'        => $fees_result['fees_charged'],
+            'interchange_fees'    => '0.00',
+            'zimswitch_fee'       => $fees_result['zimswitch_fee'],
+            'transaction_amount'  => '0.00',
+            'total_debited'       => $fees_result['fees_charged'],
+            'total_credited'      => $fees_result['fees_charged'],
+            'batch_id'            => $reference,
+            'merchant_id'         => '',
+            'transaction_status'  => 1,
+            'account_debited'     => $request->account_number,
+            'pan'                 => $request->card_number,
+            'description'         => 'Transaction successfully processed.'
+        ]);
 
 
-                        ]);
+        return response([
+            'code'              => '000',
+            'available_balance' => "$available_balance",
+            'ledger_balance'    => "$available_balance",
+            'batch_id'          => "$reference",
+            'description'       => "SUCCESS",
+        ]);
 
-                    }
-                    $batch_id = $batch['batch'];
-                    $available_balance_  =   $balance_result['available_balance'] - $fees_result['fees_charged'];
-                    $ledger_balance_     =  $balance_result['ledger_balance'] - $fees_result['fees_charged'];
-                    $available_balance  = round($available_balance_ , 2, PHP_ROUND_HALF_EVEN) * 100;
-                    $ledger_balance     = round($ledger_balance_ , 2, PHP_ROUND_HALF_EVEN) * 100;
-
-                    //Send SMS JOB
-
-               /* if(isset($request->mobile)) {
-                    $new_balance = money_format('$%i', $available_balance_);
-                    $merchant = Merchant::find($merchant_id->merchant_id)->name;
-                    dispatch(new NotifyBills(
-                            COUNTRY_CODE . substr($request->mobile, 1, 10),
-                            "Balance enquiry via Getbucks m-POS was successful, your balance is ZWL $new_balance. Merchant : $merchant",
-                            'GetBucks',
-                            '',
-                            '',
-                            '1'
-                        )
-                    );
-               */
-                }
-
-                    return response([
-
-                        'code'                  => '000',
-                        'currency'              => CURRENCY,
-                        'available_balance'     => "$available_balance",
-                        'ledger_balance'        => "$ledger_balance",
-                        'batch_id'              => "$batch_id",
-
-                    ]);
-
-            }
+    }
 
     public static function checkBalance($account_number)
     {
@@ -330,22 +313,7 @@ class BalanceOnUsController extends Controller
 
     }
 
-    public function genRandomNumber($length = 7, $formatted = false){
-        $nums = '0123456789';
 
-        // First number shouldn't be zero
-        $out = $nums[ mt_rand(1, strlen($nums) - 1) ];
-
-        // Add random numbers to your string
-        for ($p = 0; $p < $length - 1; $p++)
-            $out .= $nums[ mt_rand(0, strlen($nums) - 1) ];
-
-        // Format the output with commas if needed, otherwise plain output
-        if ($formatted)
-            return number_format($out);
-
-        return $out;
-    }
 
     protected function balance_enquiry(Array $data){
         return Validator::make($data, [

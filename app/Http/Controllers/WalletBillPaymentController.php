@@ -11,6 +11,7 @@ use App\Jobs\WalletAgentBillPaymentJob;
 use App\Jobs\WalletExclusiveBillPaymentJob;
 use App\Jobs\WalletInclusiveBillPaymentJob;
 use App\ManageValue;
+use App\Services\LoggingService;
 use App\Services\SmsNotificationService;
 use App\Services\WalletFeesCalculatorService;
 use App\TransactionType;
@@ -173,6 +174,14 @@ class WalletBillPaymentController extends Controller
 
         }
 
+        LoggingService::message($request->all());
+        if(WALLET_STATUS != 'ACTIVE'){
+            return response([
+                'code' => '100',
+                'description' => 'Wallet service is temporarily unavailable',
+            ]);
+        }
+
         //Declarations
         $biller_account = Wallet::whereMobile($request->biller_account);
         $source = Wallet::whereMobile($request->source_mobile);
@@ -264,7 +273,7 @@ class WalletBillPaymentController extends Controller
 
 
     public function processBillPayment($source_mobile,$biller_mobile,$transaction_amount,$fee,$tax_fee,$reference,$bill_payment_id,$bill_reference){
-       // return $fee;
+
         DB::beginTransaction();
         try {
 

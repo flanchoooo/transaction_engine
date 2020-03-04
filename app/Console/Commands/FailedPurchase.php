@@ -60,6 +60,8 @@ class FailedPurchase extends Command
 
     public function handle()
     {
+
+
         $result = BRJob::where('txn_status', 'FAILED')
             ->where('txn_type',PURCHASE_OFF_US)
             ->get();

@@ -45,8 +45,6 @@ class PurchaseJob extends Job
     public function handle(){
 
         $fees_charged = FeesCalculatorService::calculateFees($this->amount, '0.00', PURCHASE_OFF_US, HQMERCHANT,$this->account_number);
-
-
         $fees_total = $fees_charged['fees_charged'] - $fees_charged['tax'];
         $branch_id = substr($this->account_number, 0, 3);
         $debit_client_purchase_amount = array(
@@ -54,7 +52,7 @@ class PurchaseJob extends Job
             'our_branch_id'             => $branch_id,
             'account_id'                => $this->account_number,
             'trx_description_id'        => '007',
-            'trx_description'           => "SP |POS Purchase | $this->narration | $this->rrn",
+            'trx_description'           => "POS Purchase | $this->narration | $this->account_number | $this->rrn",
             'trx_amount'                => '-' . $this->amount);
 
         $tax = array(
@@ -62,7 +60,7 @@ class PurchaseJob extends Job
             'our_branch_id'             => $branch_id,
             'account_id'                => $this->account_number,
             'trx_description_id'        => '007',
-            'trx_description'           => "SP | POS Purchase Tax ",
+            'trx_description'           =>  "Transaction tax | $this->narration | $this->account_number | $this->rrn",
             'trx_amount'                => '-' . $fees_charged['tax']);
 
 
@@ -71,7 +69,7 @@ class PurchaseJob extends Job
             'our_branch_id'             => $branch_id,
             'account_id'                => $this->account_number,
             'trx_description_id'        => '007',
-            'trx_description'           =>  " SP | POS Purchase fees | $this->narration | $this->rrn",
+            'trx_description'           =>  "Fees | $this->narration | $this->account_number | $this->rrn",
             'trx_amount'                => '-' . $fees_total);
 
         $credit_tax = array(
@@ -79,7 +77,7 @@ class PurchaseJob extends Job
             'our_branch_id'             => $branch_id,
             'account_id'                => TAX,
             'trx_description_id'        => '008',
-            'trx_description'           => "Transaction Tax RRN:$this->rrn",
+            'trx_description'           =>  "Transaction tax | $this->narration | $this->account_number | $this->rrn",
             'trx_amount'                => $fees_charged['tax']);
 
         $credit_zimswitch_amount = array(
@@ -87,7 +85,7 @@ class PurchaseJob extends Job
             'our_branch_id'             => $branch_id,
             'account_id'                => ZIMSWITCH,
             'trx_description_id'        => '008',
-            'trx_description'           => 'POS Purchase Acc:'.$this->account_number.'  RRN:'. $this->rrn,
+            'trx_description'           => "POS Purchase | $this->narration | $this->account_number | $this->rrn",
             'trx_amount'                =>  $this->amount);
 
 
@@ -96,7 +94,7 @@ class PurchaseJob extends Job
             'our_branch_id'             => $branch_id,
             'account_id'                => REVENUE,
             'trx_description_id'        => '008',
-            'trx_description'           => "POS Purchase Acquirer fees RRN:$this->rrn   Acc:$this->account_number",
+            'trx_description'           => "Acquirer fee | $this->narration | $this->account_number | $this->rrn",
             'trx_amount'                =>  $fees_charged['acquirer_fee']);
 
         $zimswitch_fee = array(
@@ -104,7 +102,7 @@ class PurchaseJob extends Job
             'our_branch_id'             => $branch_id,
             'account_id'                => ZIMSWITCH,
             'trx_description_id'        => '008',
-            'trx_description'           => "POS Purchase Switch fee RRN:$this->rrn  Acc:$this->account_number",
+            'trx_description'           => "Z06 - Switch fee | $this->narration | $this->account_number | $this->rrn",
             'trx_amount'                =>  $fees_charged['zimswitch_fee']);
 
         try {

@@ -42,6 +42,8 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
 
     //Balance Enquiry
     $app->post('balance',  'BalanceOnUsController@balance');
+    $app->post('br_balance',  'BRBalanceController@br_balance');
+    $app->post('post_transaction',  'BRBalanceController@post_transaction');
     $app->post('balance_off_us',  'BalanceOffUsController@balance_off_us');
     $app->get('balance_bank_x',  'BalanceBankXController@balance');
 
@@ -50,7 +52,6 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
     $app->post('purchase',  'PurchaseOnUsController@purchase');
     $app->get('mdr',  'PurchaseOnUsController@mdr');
     $app->post('purchase_off_us',  'PurchaseOffUsController@purchase_off_us');
-    $app->post('purchase_off_us_copy',  'PurchaseOffUsController@purchase_off_us_copy');
 
     //Banking
     $app->post('cash_withdrawal',  'WithdrawalOnUsController@cash_withdrawal');

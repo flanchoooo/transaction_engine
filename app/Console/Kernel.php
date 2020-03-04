@@ -23,7 +23,8 @@ class Kernel extends ConsoleKernel
         \App\Console\Commands\FAILED::class,
         \App\Console\Commands\FailedPurchase::class,
         \App\Console\Commands\WalletSettlement::class,
-        \App\Console\Commands\FailedBalance::class
+        \App\Console\Commands\FailedBalance::class,
+        \App\Console\Commands\ProcessPendingTransaction::class
     ];
 
     /**
@@ -34,6 +35,17 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
+
+        $schedule->command('reversal:run')->cron('* * * * *')
+            ->withoutOverlapping();
+
+            $schedule->command('purchase:run')->cron('* * * * *')
+            ->withoutOverlapping();
+
+            $schedule->command('cash:run')->cron('* * * * *')
+            ->withoutOverlapping();
+
+/*
         $schedule->command('penalty_deduction:run')->cron('0 0 * * *')
             ->withoutOverlapping();
 
@@ -58,8 +70,10 @@ class Kernel extends ConsoleKernel
         $schedule->command('wallet_settlement:run')->cron('* * * * *')
             ->withoutOverlapping();
 
-
+*/
     }
+
+
 
 
 

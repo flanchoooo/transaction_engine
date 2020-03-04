@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 
 
 
+use App\Services\LoggingService;
 use App\TransactionType;
 use App\Wallet;
 use App\WalletHistory;
@@ -59,10 +60,12 @@ class WalletSupportController extends Controller
            $account = WalletHistory::find($item->id);
             //if($item->total_debited == 0) continue;
             $txn_type =  TransactionType::find($item['txn_type_id']);
+            $tax = $item['tax'];
+            $fees = $item['revenue_fees'];
             $temp = array(
                 'trx_date'      =>\Carbon\Carbon::parse($txn_type->created_at)->format('d/m/Y'),
                 'value_date'    =>\Carbon\Carbon::parse($txn_type->created_at)->format('d/m/Y'),
-                'particulars'   => $txn_type->name,
+                'particulars'   => "$txn_type->name | Fees:$fees | ". $item['reversed'],
                 'debit'         => $item['total_debited'],
                 'credit'        => $item['total_credited'],
                 'closing'       => $item['balance_after_txn'],

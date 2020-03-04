@@ -30,7 +30,7 @@ class WalletHistory extends Model implements Authenticatable
         'transaction_type',
         'merchant_account',
         'zimswitch_txn_amount'
-        ,'tax','revenue_fees','debit_mdr_from_merchant','interchange_fees','zimswitch_fee',
+       ,'debit_mdr_from_merchant','interchange_fees','zimswitch_fee',
         'switch_reference','merchant_id','transaction_status','employee_id','description','account_credited','trust_account','account_debited'
 
     ,];
