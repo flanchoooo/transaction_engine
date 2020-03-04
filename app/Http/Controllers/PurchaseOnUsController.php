@@ -626,10 +626,6 @@ class PurchaseOnUsController extends Controller
         );
 
 
-
-
-
-
     }
 
     protected function purchase_validation(Array $data)
