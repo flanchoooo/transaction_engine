@@ -82,6 +82,7 @@ class HotRechargeService
 
             $response = json_decode($result->getBody()->getContents());
             if ($response->code != '00'){
+                LoggingService::message("Airtime transaction processed successfully |$response->description");
                 return array(
                     'code'           => $response->code,
                     'description'   => $response->description

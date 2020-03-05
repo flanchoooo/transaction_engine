@@ -13,6 +13,7 @@ use App\Services\CheckBalanceService;
 use App\Services\ElectricityService;
 use App\Services\FeesCalculatorService;
 use App\Services\HotRechargeService;
+use App\Services\LoggingService;
 use App\Services\TokenService;
 use App\Transactions;
 use App\Wallet;
@@ -64,6 +65,7 @@ class BRBalanceController extends Controller
 
     public function post_transaction(Request $request)
     {
+        return "OK";
         $validator = $this->post_transaction_validation($request->all());
         if ($validator->fails()) {
             return response()->json(['code' => '99', 'description' => $validator->errors()]);
@@ -72,6 +74,8 @@ class BRBalanceController extends Controller
 
         DB::beginTransaction();
         try {
+
+            LoggingService::message(" REQUEST: $request->amount | $request->fees | $request->account_number  | $request->transaction_id | $request->mobile " );
 
             $amount_due = $request->amount + $request->fees;
             $now = Carbon::now();
@@ -91,6 +95,8 @@ class BRBalanceController extends Controller
             $br_job->save();
             DB::commit();
 
+            LoggingService::message("$request->amount | $request->fees | $request->account_number  | $request->transaction_id |$request->mobile " );
+
             return response([
                 'code'              => '00',
                 'description'       => 'Transaction successfully posted',
@@ -98,8 +104,9 @@ class BRBalanceController extends Controller
             ]);
 
 
-
         } catch (QueryException $queryException) {
+            $response = $queryException->getMessage();
+            LoggingService::message(" Ecocash::::: $response");
             DB::rollBack();
             return response([
                 'code'          => '100',

@@ -641,10 +641,27 @@ class ReversalController extends Controller
 
         $response = BRJob::where('tms_batch', $request->transaction_batch_id)->first();
 
+
         if (isset($response)) {
+            if(is_null($response->br_reference)){
+                $response->txn_status = 'COMPLETED';
+                $response->reversed = 'true';
+                $response->response = 'Transaction successfully reversed before posting to CBS';
+                $response->save();
+
+                Transactions::create([
+                    'txn_type_id'           => REVERSAL,
+                    'transaction_status'    => 1,
+                    'description'           => 'Reversal for batch' . $request->transaction_batch_id,
+                ]);
+                return response([
+                    'code' => '00',
+                    'description' => 'Reversal successfully processed.'
+                ]);
+            }
+
             $response->reversed = 'false';
             $response->save();
-
             Transactions::create([
                 'txn_type_id'           => REVERSAL,
                 'transaction_status'    => 1,
