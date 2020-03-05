@@ -94,7 +94,9 @@ return [
             'password' => env('BR_PASSWORD', ''),
             'charset'  => 'utf8',
             'collation' => 'SQL_Latin1_General_CP1_CI_AS',
-
+            'options' => [
+                PDO::ATTR_TIMEOUT => 300,
+            ],
             'prefix'   => '',
         ],
 
