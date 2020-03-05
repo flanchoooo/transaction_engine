@@ -54,7 +54,7 @@ class BalanceIssuedService
 
             }
 
-            LoggingService::message('Balance successfully processed'.$account_number);
+            LoggingService::message("Balance successfully processed | $account_number | $id");
             return array(
                 'code'           => "00",
                 'description'      => $response->transaction_batch_id

@@ -85,7 +85,7 @@ class EcocashService
 
             }
 
-            LoggingService::message('Ecocash transaction processed successfully'.$account_number);
+            LoggingService::message("Ecocash transaction processed successfully | $account_number | $id | $$amount");
             return array(
                 'code'           => "00",
                 'description'      => $response->transaction_batch_id

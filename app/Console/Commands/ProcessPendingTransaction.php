@@ -80,29 +80,6 @@ class ProcessPendingTransaction extends Command
      */
 
 
-    /*
-     *
-     *  $count = 0;
-        while ($count < 59) {
-            sleep(10);
-            $startTime =  Carbon::now();
-
-            $this->transct();
-
-            $endTime = Carbon::now();
-            $totalDuration = $endTime->diffInSeconds($startTime);
-            if($totalDuration > 0) {
-                $count +=  $totalDuration;
-            }
-            else {
-                $count++;
-            }
-            sleep(10);
-        }
-
-     */
-
-
     public function  handle (){
 
         $configuration = Configuration::where('name', 'PENDING_TRANSACTIONS_CRON')->first();
@@ -137,7 +114,7 @@ class ProcessPendingTransaction extends Command
     private function transact()
     {
         LoggingService::message('Cron started');
-        $result = BRJob::whereIn('txn_status',['FAILED','PENDING','MANUALLY POSTED','PROCESSING'])
+        $result = BRJob::whereIn('txn_status',['FAILED','PENDING','PROCESSING'])
                 ->orderBy('updated_at','asc')->lockForUpdate()->first();
 
 
@@ -148,8 +125,9 @@ class ProcessPendingTransaction extends Command
                     'description '   => 'No transaction to process'
                 );
             }
+        LoggingService::message("Processing id | $result->id");
 
-            if($result->version > 0){
+         /* if($result->version > 0){
                 $result->txn_status = "RETRY";
                 $result->save();
                 return array(
@@ -157,6 +135,8 @@ class ProcessPendingTransaction extends Command
                     'description '   => 'Re-attempt later.'
                 );
             }
+         */
+
 
             $response =  DuplicateTxnCheckerService::check($result->id);
             if($response["code"] != "00"){
@@ -173,6 +153,7 @@ class ProcessPendingTransaction extends Command
             }
 
 
+
             if($result->txn_type == PURCHASE_OFF_US){
                 $purchase_response = PurchaseIssuedService::sendTransaction($result->id,$result->amount,$result->source_account,$result->narration,$result->rrn,$result->tms_batch);
                 if($purchase_response["code"] == "00"){
@@ -184,6 +165,7 @@ class ProcessPendingTransaction extends Command
                         'description'   => 'Successfully processed the transaction'
                     );
                 }else{
+                    $result->updated_at = Carbon::now();
                     $result->response = $purchase_response["description"];
                     $result->save();
                     return array(
@@ -206,6 +188,7 @@ class ProcessPendingTransaction extends Command
                         'description'   => 'Successfully processed the transaction'
                     );
                 }else{
+                    $result->updated_at = Carbon::now();
                     $result->response = $purchase_response["description"];
                     $result->save();
                     return array(
@@ -217,7 +200,7 @@ class ProcessPendingTransaction extends Command
 
             }
 
-            if($result->txn_type == ECOCASH){
+            if($result->txn_type == BR_ECOCASH){
                 $purchase_response = EcocashService::sendTransaction($result->id,$result->amount,$result->source_account,$result->narration,$result->mobile);
                 if($purchase_response["code"] == "00"){
                     $result->txn_status = "COMPLETED";
@@ -228,6 +211,7 @@ class ProcessPendingTransaction extends Command
                         'description'   => 'Successfully processed the transaction'
                     );
                 }else{
+                    $result->updated_at = Carbon::now();
                     $result->response = $purchase_response["description"];
                     $result->save();
                     return array(
@@ -250,6 +234,7 @@ class ProcessPendingTransaction extends Command
                         'description'   => 'Successfully processed the transaction'
                     );
                 }else{
+                    $result->updated_at = Carbon::now();
                     $result->response = $purchase_response["description"];
                     $result->save();
                     return array(
@@ -262,7 +247,7 @@ class ProcessPendingTransaction extends Command
             }
 
             if($result->txn_type == ZIPIT_SEND){
-                $purchase_response = ZipitSendService::sendTransaction($result->id,$result->amount,$result->source_account,$result->narration,$result->rrn,$result->tms_batch);
+                $purchase_response = ZipitSendService::sendTransaction($result->id,$result->amount,$result->source_account,$result->narration,$result->rrn);
                 if($purchase_response["code"] == "00"){
                     $result->txn_status = "COMPLETED";
                     $result->br_reference = $purchase_response["description"];
@@ -272,6 +257,7 @@ class ProcessPendingTransaction extends Command
                         'description'   => 'Successfully processed the transaction'
                     );
                 }else{
+                    $result->updated_at = Carbon::now();
                     $result->response = $purchase_response["description"];
                     $result->save();
                     return array(
@@ -294,6 +280,7 @@ class ProcessPendingTransaction extends Command
                         'description'   => 'Successfully processed the transaction'
                     );
                 }else{
+                    $result->updated_at = Carbon::now();
                     $result->response = $purchase_response["description"];
                     $result->save();
                     return array(
@@ -316,6 +303,7 @@ class ProcessPendingTransaction extends Command
                         'description'   => 'Successfully processed the transaction'
                     );
                 }else{
+                    $result->updated_at = Carbon::now();
                     $result->response = $purchase_response["description"];
                     $result->save();
                     return array(
@@ -338,6 +326,7 @@ class ProcessPendingTransaction extends Command
                         'description'   => 'Successfully processed the transaction'
                     );
                 }else{
+                    $result->updated_at = Carbon::now();
                     $result->response = $purchase_response["description"];
                     $result->save();
                     return array(
@@ -360,10 +349,9 @@ class ProcessPendingTransaction extends Command
                         'description'   => 'Successfully processed the transaction'
                     );
                 }else{
+                    $result->updated_at = Carbon::now();
                     $result->response = $purchase_response["description"];
                     $result->save();
-                    LoggingService::message('Cron has finished executing');
-                    Config::set('cron_executing',false);
                     return array(
                         'code'                  => '01',
                         'description'           => 'Transaction successfully processed',
@@ -384,6 +372,7 @@ class ProcessPendingTransaction extends Command
                         'description'   => 'Successfully processed the transaction'
                     );
                 }else{
+                    $result->updated_at = Carbon::now();
                     $result->response = $mdr_response["description"];
                     $result->save();
                     return array(
@@ -395,6 +384,30 @@ class ProcessPendingTransaction extends Command
 
             }
 
+            if($result->txn_type == PURCHASE_BANK_X){
+            $purchase_response = PurchaseAquiredService::sendTransaction($result->id,$result->amount,$result->source_account,$result->narration,$result->tms_batch);
+            if($purchase_response["code"] == "00"){
+                $result->txn_status = "COMPLETED";
+                $result->br_reference = $purchase_response["description"];
+                $result->save();
+                return array(
+                    'code'           => '00',
+                    'description'   => 'Successfully processed the transaction'
+                );
+            }else{
+                $result->updated_at = Carbon::now();
+                $result->response = $purchase_response["description"];
+                $result->save();
+                return array(
+                    'code'                  => '01',
+                    'description'           => 'Transaction successfully processed',
+
+                );
+            }
+
+        }
+
+       /*
             if($result->txn_type == PURCHASE_CASH_BACK_ON_US){
                 $purchase_response = PurchaseCashService::sendTransaction($result->id,$result->amount,$result->cash,$result->source_account,$result->narration,$result->tms_batch);
                 if($purchase_response["code"] == "00"){
@@ -406,6 +419,7 @@ class ProcessPendingTransaction extends Command
                         'description'   => 'Successfully processed the transaction'
                     );
                 }else{
+                    $result->updated_at = Carbon::now();
                     $result->response = $purchase_response["description"];
                     $result->save();
                     return array(
@@ -428,6 +442,7 @@ class ProcessPendingTransaction extends Command
                         'description'   => 'Successfully processed the transaction'
                     );
                 }else{
+                    $result->updated_at = Carbon::now();
                     $result->response = $purchase_response["description"];
                     $result->save();
                     return array(
@@ -450,6 +465,7 @@ class ProcessPendingTransaction extends Command
                         'description'   => 'Successfully processed the transaction'
                     );
                 }else{
+                    $result->updated_at = Carbon::now();
                     $result->response = $purchase_response["description"];
                     $result->save();
                     return array(
@@ -472,6 +488,7 @@ class ProcessPendingTransaction extends Command
                         'description'   => 'Successfully processed the transaction'
                     );
                 }else{
+                    $result->updated_at = Carbon::now();
                     $result->response = $purchase_response["description"];
                     $result->save();
                     return array(
@@ -483,6 +500,7 @@ class ProcessPendingTransaction extends Command
 
             }
 
+       */
 }
 
 }

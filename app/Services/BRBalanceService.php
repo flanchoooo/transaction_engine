@@ -27,7 +27,7 @@ class BRBalanceService
         $amounts = BRJob::where('source_account',$account_number)
             ->whereIn('txn_status',['FAILED_','FAILED','PROCESSING','PENDING'])
             ->where('txn_type', '!=',  '156579070528551244')
-            ->get()->sum(['amount']);
+            ->get()->sum(['amount_due']);
 
         $balance = $balance_res["available_balance"] - $amounts;
         return array (

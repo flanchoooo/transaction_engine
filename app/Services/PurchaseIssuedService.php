@@ -103,7 +103,7 @@ class PurchaseIssuedService
             }
 
 
-            LoggingService::message("Purchase transaction processed successfully for account:$account_number");
+            LoggingService::message("Purchase transaction processed successfully for account | $account_number | $id ");
             return array(
                 'code'           => "00",
                 'description'      => $response->transaction_batch_id

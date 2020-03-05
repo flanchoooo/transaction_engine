@@ -19,6 +19,7 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ClientException;
 use GuzzleHttp\Exception\RequestException;
 use Illuminate\Console\Command;
+use Illuminate\Database\QueryException;
 
 class Cash extends Command
 {
@@ -69,6 +70,10 @@ class Cash extends Command
             LoggingService::message('Successfully dispatched merchant settlement request');
             $merchant_id = Devices::where('imei', $item->imei)->first();
             $merchant_account = MerchantAccount::where('merchant_id',$merchant_id->merchant_id)->first();
+            if(!isset($merchant_account)){
+                $item->status= 'FAILED';
+                $item->save();
+            }
             $fees_result = FeesCalculatorService::calculateFees(
                 $item->amount,
                 '0.00',
@@ -103,11 +108,17 @@ class Cash extends Command
             $item->status= 'COMPLETED';
             $item->save();
 
+            try{
+                $br_jobs->save();
+                $item->status= 'COMPLETED';
+            }catch(QueryException $queryException){
+                LoggingService::message($queryException->getMessage());
+                $item->status= 'FAILED';
+            }
+
+            $item->save();
+
         }
-
-
-
-
 
 
     }

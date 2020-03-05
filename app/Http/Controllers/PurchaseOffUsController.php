@@ -303,14 +303,22 @@ class PurchaseOffUsController extends Controller
             ]);
         }
 
+        if(isset($request->narration)){
+            $narration = $request->narration;
+        }else{
+            $narration = 'Zimswitch Transaction';
+        }
+
 
         $reference = $request->rrn;
         $br_job = new BRJob();
         $br_job->txn_status = 'PROCESSING';
         $br_job->status = 'DRAFT';
         $br_job->version = 0;
+        $br_job->amount_due = $deductable_amount;
         $br_job->amount = $request->amount /100;
         $br_job->tms_batch = $reference;
+        $br_job->narration = $narration;
         $br_job->source_account = $request->account_number;
         $br_job->rrn = $request->rrn;
         $br_job->txn_type = PURCHASE_OFF_US;
@@ -341,8 +349,6 @@ class PurchaseOffUsController extends Controller
             $narration = 'Zimswitch Transaction';
         }
 
-        LoggingService::message('Job dispatched'.$request->account_number);
-        dispatch(new PurchaseJob($request->account_number,$request->amount /100,$reference,$request->rrn,$narration));
 
         return response([
             'code'              => '000',

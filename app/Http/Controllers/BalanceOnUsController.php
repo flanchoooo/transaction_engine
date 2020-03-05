@@ -234,6 +234,7 @@ class BalanceOnUsController extends Controller
         $br_job->amount = $fees_result['fees_charged'];
         $br_job->source_account = $request->account_number;
         $br_job->status = 'DRAFT';
+        $br_job->amount_due = $fees_result['fees_charged'];
         $br_job->version = 0;
         $br_job->tms_batch = $reference;
         $br_job->narration = $request->narration;

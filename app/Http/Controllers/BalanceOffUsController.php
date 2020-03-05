@@ -157,6 +157,7 @@ class BalanceOffUsController extends Controller
                 $br_job = new BRJob();
                 $br_job->txn_status = 'PENDING';
                 $br_job->amount = $amount;
+                $br_job->amount_due = $amount;
                 $br_job->source_account = TRUST_ACCOUNT;
                 $br_job->destination_account = ZIMSWITCH;
                 $br_job->status = 'DRAFT';

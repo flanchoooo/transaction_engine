@@ -103,7 +103,7 @@ class PurchaseCashOnUsController extends Controller
                 $br_job = new BRJob();
                 $br_job->txn_status = 'PENDING';
                 $br_job->amount = $request->amount / 100;
-                $br_job->cash = $request->cashback_amount/100;
+                $br_job->amount_due = $total_funds;
                 $br_job->source_account = $request->account_number;
                 $br_job->status = 'DRAFT';
                 $br_job->version = 0;
@@ -116,6 +116,7 @@ class PurchaseCashOnUsController extends Controller
                 $br_jobs = new BRJob();
                 $br_jobs->txn_status = 'PENDING';
                 $br_jobs->amount = $fees_charged['mdr'];
+                $br_jobs->amount_due = $fees_charged['mdr'];
                 $br_jobs->source_account = $merchant_account->account_number;
                 $br_jobs->status = 'DRAFT';
                 $br_jobs->version = 0;

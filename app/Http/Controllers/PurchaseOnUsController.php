@@ -387,6 +387,7 @@ class PurchaseOnUsController extends Controller
             $br_job->source_account = $request->account_number;
             $br_job->status = 'DRAFT';
             $br_job->version = 0;
+            $br_job->amount_due = $total_funds;
             $br_job->tms_batch = $reference;
             $br_job->narration = $request->imei;
             $br_job->rrn = $reference;

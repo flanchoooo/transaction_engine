@@ -15,10 +15,12 @@ use App\PenaltyDeduction;
 use App\PendingTxn;
 use App\Services\AccountInformationService;
 use App\Services\BalanceEnquiryService;
+use App\Services\BRBalanceService;
 use App\Services\FeesCalculatorService;
 use App\Services\LoggingService;
 use App\Services\TokenService;
 use App\Services\UniqueTxnId;
+use App\Services\ZipitSendService;
 use App\Transactions;
 use App\TransactionType;
 use App\Wallet;
@@ -47,6 +49,7 @@ class ZipitController extends Controller
 
     public function send(Request $request){
         
+
 
         $validator = $this->zipit_send_validation($request->all());
         if ($validator->fails()) {
@@ -205,239 +208,96 @@ class ZipitController extends Controller
             // return 'Success';
         }
 
-        try {
 
-             $fees_result = FeesCalculatorService::calculateFees(
+            $reference = UniqueTxnId::transaction_id();
+            $fees_result = FeesCalculatorService::calculateFees(
                 $request->amount / 100,
                 '0.00',
                 ZIPIT_SEND,
-                HQMERCHANT,$request->br_account
+                HQMERCHANT, $request->br_account
 
             );
 
-               $response =   $this->switchLimitChecks($request->br_account, $request->amount/100 , $fees_result['maximum_daily'], $request->account_number,$fees_result['transaction_count'], $fees_result['max_daily_limit']);
-            if($response["code"] != '000'){
+
+            $response = $this->switchLimitChecks($request->br_account, $request->amount / 100, $fees_result['maximum_daily'], $request->account_number, $fees_result['transaction_count'], $fees_result['max_daily_limit']);
+            if ($response["code"] != '000') {
                 return response([
                     'code' => $response["code"],
                     'description' => $response["description"],
                 ]);
             }
 
-
-
-            $zimswitch = ZIMSWITCH;
-            $revenue =REVENUE;
-            $tax =  TAX;
-            $branch_id = substr($request->br_account, 0, 3);
-
-            $account_debit = array(
-                'serial_no'             => '472100',
-                'our_branch_id'         => $branch_id,
-                'account_id'            => $request->br_account,
-                'trx_description_id'    => '007',
-                'trx_description'       => "Zipit send | $request->destination_bank | $request->br_account | RRN:$request->rrn",
-                'trx_amount'            => - $request->amount/100);
-
-            $account_debit_fees = array(
-                'serial_no'             => '472100',
-                'our_branch_id'         => $branch_id,
-                'account_id'            => $request->br_account,
-                'trx_description_id'    => '007',
-                'trx_description'       => "Zipit fees | $request->destination_bank | RRN:$request->rrn",
-                'trx_amount'            => '-' . $fees_result['fees_charged']);
-
-            $destination_credit_zimswitch = array(
-                'serial_no'             => '472100',
-                'our_branch_id'         => $branch_id,
-                'account_id'            => $zimswitch,
-                'trx_description_id'    => '008',
-                'trx_description'       =>"Zipit send | $request->destination_bank  | RRN:$request->rrn",
-                'trx_amount'            => $request->amount/100);
-
-            $bank_revenue_credit = array(
-                'serial_no'             => '472100',
-                'our_branch_id'         => $branch_id,
-                'account_id'            => $revenue,
-                'trx_description_id'    => '008',
-                'trx_description'       =>"Acquirer fee | $request->br_account | RRN:$request->rrn",
-                'trx_amount'            => $fees_result['acquirer_fee']);
-
-            $tax_credit = array(
-                'serial_no'             => '472100',
-                'our_branch_id'         => $branch_id,
-                'account_id'            => $tax,
-                'trx_description_id'    => '008',
-                'trx_description'       => "Transaction tax | $request->br_account | RRN:$request->rrn",
-                'trx_amount'            => $fees_result['tax']);
-
-            $zimswitch_fees = array(
-                'serial_no'             => '472100',
-                'our_branch_id'         => $branch_id,
-                'account_id'            => $revenue,
-                'trx_description_id'    => '008',
-                'trx_description'       =>  "Z06 - Switch fee | $request->br_account | RRN:$request->rrn",
-                'trx_amount'            => $fees_result['zimswitch_fee']);
-
-
-            $client = new Client();
-
-
-            $result = $client->post(env('BASE_URL') . '/api/internal-transfer', [
-
-                'headers' => ['Authorization' => 'Zipit', 'Content-type' => 'application/json',],
-                'json' => [
-                    'bulk_trx_postings' =>  array(
-                        $account_debit,
-                        $account_debit_fees,
-                        $destination_credit_zimswitch,
-                        $bank_revenue_credit,
-                        $tax_credit,
-                        $zimswitch_fees
-                    )
-                ]
-
+        $balance_res = BRBalanceService::br_balance($request->br_account);
+        if ($balance_res["code"] != '000') {
+            return response([
+                'code'          => $balance_res["code"],
+                'description'   => $balance_res["description"],
             ]);
+        }
 
-            $response = json_decode($result->getBody()->getContents());
-            if($response->description == 'API : Validation Failed: Customer TrxAmount cannot be Greater Than the AvailableBalance'){
-                Transactions::create([
-                    'txn_type_id'         => ZIPIT_SEND,
-                    'tax'                 => '0.00',
-                    'revenue_fees'        => '0.00',
-                    'interchange_fees'    => '0.00',
-                    'zimswitch_fee'       => '0.00',
-                    'transaction_amount'  => '0.00',
-                    'total_debited'       => '0.00',
-                    'total_credited'      => '0.00',
-                    'batch_id'            => '',
-                    'switch_reference'    => '',
-                    'merchant_id'         => '',
-                    'transaction_status'  => 1,
-                    'account_debited'     => $request->br_account,
-                    'pan'                 => '',
-                    'merchant_account'    => '',
-                    'description'         => 'Insufficient funds',
-                ]);
+        $available_balance = $balance_res["available_balance"];
+        $total_funds = $fees_result['fees_charged'] + ($request->amount / 100);
+        if ($total_funds > $available_balance) {
+            return response([
+                'code' => '116',
+                'description' => "Insufficient funds",
+            ]);
+        }
 
 
-                return response([
-                    'code' => '116',
-                    'description' => 'Insufficient funds'
-                ]);
-
-            }
-            if($response->code != '00'){
-                Transactions::create([
-                    'txn_type_id'         => ZIPIT_SEND,
-                    'tax'                 => '0.00',
-                    'revenue_fees'        => '0.00',
-                    'interchange_fees'    => '0.00',
-                    'zimswitch_fee'       => '0.00',
-                    'transaction_amount'  => '0.00',
-                    'total_debited'       => '0.00',
-                    'total_credited'      => '0.00',
-                    'batch_id'            => '',
-                    'switch_reference'    => '',
-                    'merchant_id'         => '',
-                    'transaction_status'  => 1,
-                    'account_debited'     => $request->br_account,
-                    'pan'                 => '',
-                    'merchant_account'    => '',
-                    'description'         => $response->description,
-
-
-
-                ]);
-
-                return response([
-                    'code' => '100',
-                    'description' => $response->description
-                ]);
-
-            }
-
-
-
-
-
-            $total_debit  = $request->amount/100 + $fees_result['fees_charged'];
+            $total_debit = $request->amount / 100 + $fees_result['fees_charged'];
             Transactions::create([
 
-                'txn_type_id'         => ZIPIT_SEND,
-                'tax'                 => $fees_result['tax'],
-                'revenue_fees'        => $fees_result['acquirer_fee'],
-                'interchange_fees'    => '0.00',
-                'zimswitch_fee'       => '0.00',
-                'transaction_amount'  => $request->amount/100,
-                'total_debited'       => $total_debit,
-                'total_credited'      => $total_debit,
-                'batch_id'            => $response->transaction_batch_id,
-                'switch_reference'    => $request->transaction_id,
-                'merchant_id'         => '',
-                'transaction_status'  => 1,
-                'account_debited'     => $request->br_account,
-                'account_credited'     => ZIMSWITCH,
-                'pan'                 => '',
-                'merchant_account'    => '',
-                'description'         => 'Transaction successfully processed.',
+                'txn_type_id'           => ZIPIT_SEND,
+                'tax'                   => $fees_result['tax'],
+                'revenue_fees'          => $fees_result['acquirer_fee'],
+                'interchange_fees'      => '0.00',
+                'zimswitch_fee'         => $fees_result['zimswitch_fee'],
+                'transaction_amount'    => $request->amount / 100,
+                'total_debited'         => $total_debit,
+                'total_credited'        => $total_debit,
+                'batch_id'              => $reference,
+                'switch_reference'      => $request->transaction_id,
+                'merchant_id'           => '',
+                'transaction_status'    => 1,
+                'account_debited'       => $request->br_account,
+                'account_credited'      => ZIMSWITCH,
+                'pan'                   => '',
+                'merchant_account'      => '',
+                'description'           => 'Transaction successfully processed.',
 
             ]);
 
-
-
+            $br_job = new BRJob();
+            $br_job->txn_status = 'PENDING';
+            $br_job->amount = $request->amount /100;
+            $br_job->amount_due =$total_funds;
+            $br_job->source_account = $request->br_account;
+            $br_job->status = 'DRAFT';
+            $br_job->version = 0;
+            $br_job->tms_batch =$reference;
+            $br_job->narration ="Zipit send | RRN:$request->rrn" ;
+            $br_job->rrn =$request->rrn;
+            $br_job->txn_type = ZIPIT_SEND;
+            $br_job->save();
 
             Zipit::create([
-                'source_bank'           =>'GETBUCKS',
-                'destination_bank'      =>$request->destination_bank,
-                'source'                =>$request->br_account,
-                'destination'           =>$request->destination_account,
-                'amount'                => $request->amount/100,
-                'type'                  =>'ZIPIT SEND',
+                'source_bank'       => 'GETBUCKS',
+                'destination_bank'  => $request->destination_bank,
+                'source'            => $request->br_account,
+                'destination'       => $request->destination_account,
+                'amount'            => $request->amount / 100,
+                'type'              => 'ZIPIT SEND',
             ]);
-
 
 
             return response([
                 'code' => '000',
-                'transaction_batch_id' => (string)$response->transaction_batch_id,
-                'batch_id' => (string)$response->transaction_batch_id,
+                'transaction_batch_id' => (string)$reference,
+                'batch_id' => (string)$reference,
                 'description' => 'Success'
             ]);
 
-
-
-
-        } catch (RequestException $e) {
-
-            Transactions::create([
-
-                'txn_type_id'         => ZIPIT_SEND,
-                'tax'                 => '0.00',
-                'revenue_fees'        => '0.00',
-                'interchange_fees'    => '0.00',
-                'zimswitch_fee'       => '0.00',
-                'transaction_amount'  => '0.00',
-                'total_debited'       => '0.00',
-                'total_credited'      => '0.00',
-                'batch_id'            => '',
-                'switch_reference'    => '',
-                'merchant_id'         => '',
-                'transaction_status'  => 0,
-                'account_debited'     => $request->br_account,
-                'pan'                 => '',
-                'description'         => 'Failed to process transaction',
-
-
-            ]);
-
-            return response([
-                'code' => '100',
-                'description' => 'Failed to process transaction'
-            ]);
-
-
-
-        }
 
 
     }

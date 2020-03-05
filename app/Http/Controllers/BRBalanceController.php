@@ -51,7 +51,7 @@ class BRBalanceController extends Controller
          $amounts = BRJob::where('source_account',$request->account_number)
              ->whereIn('txn_status',['FAILED_','FAILED','PROCESSING','PENDING'])
              ->where('txn_type', '!=',  '156579070528551244')
-             ->get()->sum(['amount']);
+             ->get()->sum(['amount_due']);
 
         $balance = $balance_res["available_balance"] - $amounts;
         return response([
@@ -69,11 +69,11 @@ class BRBalanceController extends Controller
             return response()->json(['code' => '99', 'description' => $validator->errors()]);
         }
 
-        return ElectricityService::sendTransaction('1522284','50','00120200012441','tes','01225');
 
         DB::beginTransaction();
         try {
 
+            $amount_due = $request->amount + $request->fees;
             $now = Carbon::now();
             $reference = $now->format('mdHisu');
             $br_job                 = new BRJob();
@@ -81,6 +81,7 @@ class BRBalanceController extends Controller
             $br_job->status         = 'DRAFT';
             $br_job->version        = 0;
             $br_job->amount         = $request->amount;
+            $br_job->amount_due     = $amount_due;
             $br_job->tms_batch      = $reference;
             $br_job->source_account = $request->account_number;
             $br_job->rrn            = $reference;
@@ -124,6 +125,7 @@ class BRBalanceController extends Controller
             'transaction_id'        => 'required',
             'mobile'                => 'required',
             'narration'             => 'required',
+            'fees'                  => 'required',
         ]);
     }
 

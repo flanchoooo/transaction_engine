@@ -32,7 +32,7 @@ class PurchaseAquiredService
             'account_id'            => ZIMSWITCH,
             'trx_description_id'    => '007',
             'trx_description'       => "POS SALE RRN | $merchant_name |$reference",
-            'trx_amount'            => '-' . $amount);
+            'trx_amount'            =>  -$amount);
 
 
         $credit_merchant_account = array(
@@ -50,7 +50,7 @@ class PurchaseAquiredService
             'account_id'            => ZIMSWITCH,
             'trx_description_id'    => '007',
             'trx_description'       => "POS SALE Acquirer Fee | $merchant_name | $reference ",
-            'trx_amount'            => '-' . $fees_charged['acquirer_fee']);
+            'trx_amount'            =>  -$fees_charged['acquirer_fee']);
 
 
         $credit_revenue = array(
@@ -77,7 +77,7 @@ class PurchaseAquiredService
 
             $response = json_decode($result->getBody()->getContents());
             if ($response->code != '00'){
-                LoggingService::message("Purchase transaction failed: $response->description : $account_number");
+                LoggingService::message("Purchase acquired transaction failed | $response->description | $account_number | $id");
                 return array(
                     'code'           => $response->code,
                     'description'   => $response->description
@@ -85,7 +85,7 @@ class PurchaseAquiredService
             }
 
 
-            LoggingService::message("Purchase transaction processed successfully for account:$account_number");
+            LoggingService::message("Purchase  acquired transaction processed successfully for account | $account_number | $id");
             return array(
                 'code'           => "00",
                 'description'      => $response->transaction_batch_id

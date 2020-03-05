@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Log;
 
 class ZipitSendService
 {
-    public static function sendTransaction($id, $amount, $account_number, $narration, $rrn, $reference)
+    public static function sendTransaction($id, $amount, $account_number, $narration, $rrn)
     {
 
 

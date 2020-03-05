@@ -89,7 +89,7 @@ class HotRechargeService
 
             }
 
-            LoggingService::message('Airtime transaction processed successfully'.$account_number);
+            LoggingService::message("Airtime transaction processed successfully | $account_number  to $mobile|  $id |  $amount ");
             return array(
                 'code'           => "00",
                 'description'      => $response->transaction_batch_id
