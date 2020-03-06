@@ -9,16 +9,14 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Auth\Authenticatable as AuthenticableTrait;
 
 
-class BRJob extends Model implements Authenticatable
+class MobileBankingUsers extends Model implements Authenticatable
 
 {
-
-    //
 
     use AuthenticableTrait;
 
     protected $guarded = [];
-    protected $timestamp = false;
-    protected $table = 'issued_transactions';
+    protected $connection = 'mysql2';
+    protected $table = 'mobile_user';
 
 }

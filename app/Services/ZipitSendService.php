@@ -97,7 +97,7 @@ class ZipitSendService
             $response = json_decode($result->getBody()->getContents());
             if ($response->code != '00') {
                 return array(
-                    'code' => $response->code,
+                    'code' => '05',
                     'description' => $response->description
                 );
 

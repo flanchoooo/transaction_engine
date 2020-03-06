@@ -16,6 +16,7 @@ use App\PendingTxn;
 use App\Services\FeesCalculatorService;
 use App\Services\LoggingService;
 use App\Services\TokenService;
+use App\Services\UniqueTxnId;
 use App\Transaction;
 use App\Transactions;
 use GuzzleHttp\Client;
@@ -108,7 +109,8 @@ class Purchase extends Command
             $br_jobs->source_account = $merchant_account->account_number;
             $br_jobs->status = 'DRAFT';
             $br_jobs->version = 0;
-            $br_jobs->tms_batch = $item->transaction_id;
+            $br_jobs->mdr_txn_id = $item->transaction_id;
+            $br_jobs->tms_batch = UniqueTxnId::transaction_id();
             $br_jobs->narration = $item->imei;
             $br_jobs->rrn = $item->transaction_id;
             $br_jobs->txn_type = MDR_DEDUCTION;

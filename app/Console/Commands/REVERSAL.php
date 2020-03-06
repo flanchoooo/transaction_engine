@@ -16,6 +16,7 @@ use App\PenaltyDeduction;
 use App\PendingTxn;
 use App\Services\AccountInformationService;
 use App\Services\FeesCalculatorService;
+use App\Services\LoggingService;
 use App\Services\TokenService;
 use App\Transactions;
 use GuzzleHttp\Client;
@@ -73,6 +74,7 @@ class REVERSAL extends Command
 
         foreach ($process_txn as $item) {
             $response = $this->process($item->br_reference,$item->source_account);
+            LoggingService::message("Transaction successfully reversed");
             if($response["description"] == 'API : BREXMSG[Cannot find table 0.]'){
                 $item->txn_status = 'COMPLETED';
                 $item->reversed = 'true';

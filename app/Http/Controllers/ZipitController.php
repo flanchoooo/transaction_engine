@@ -16,7 +16,9 @@ use App\PendingTxn;
 use App\Services\AccountInformationService;
 use App\Services\BalanceEnquiryService;
 use App\Services\BRBalanceService;
+use App\Services\EcocashService;
 use App\Services\FeesCalculatorService;
+use App\Services\HotRechargeService;
 use App\Services\LoggingService;
 use App\Services\TokenService;
 use App\Services\UniqueTxnId;
@@ -48,9 +50,6 @@ class ZipitController extends Controller
 
 
     public function send(Request $request){
-        
-
-
         $validator = $this->zipit_send_validation($request->all());
         if ($validator->fails()) {
             return response()->json(['code' => '99', 'description' => $validator->errors()]);
@@ -520,9 +519,11 @@ class ZipitController extends Controller
 
 
     public function receive(Request $request){
+
+        return HotRechargeService::sendTransaction('23','10','00120200012441','tes','263772288500');
         $account_checker = substr($request->br_account,0, 3);
         $reference                      = $request->rrn;
-        $rrn_result = BRJob::where('rrn', $request->rrn)->get()->count();
+        /*$rrn_result = BRJob::where('rrn', $request->rrn)->get()->count();
         if($rrn_result > 0) {
             return response([
 
@@ -530,7 +531,7 @@ class ZipitController extends Controller
                 'description' => 'Do not honor'
 
             ]);
-        }
+        }*/
 
 
         if ($account_checker == '263') {
@@ -583,7 +584,7 @@ class ZipitController extends Controller
                 $br_job->version = 0;
                 $br_job->tms_batch =$reference;
                 $br_job->narration ="WALLET | Credit wallet via wallet zipit receive | $reference | RRN:$request->rrn";
-                $br_job->rrn =$request->rrn;
+                $br_job->updated_at = '2000-01-01 00:00:00';
                 $br_job->txn_type = WALLET_SETTLEMENT;
                 $br_job->save();
 
@@ -668,6 +669,7 @@ class ZipitController extends Controller
             ]);
         }
 
+
         $br_job = new BRJob();
         $br_job->txn_status = 'PENDING';
         $br_job->amount = $request->amount /100;
@@ -675,9 +677,13 @@ class ZipitController extends Controller
         $br_job->status = 'DRAFT';
         $br_job->version = 0;
         $br_job->tms_batch = $reference;
+        $br_job->updated_at = '2014-01-01 00:00:01';
         $br_job->rrn = $request->rrn;
         $br_job->txn_type = ZIPIT_RECEIVE;
         $br_job->save();
+
+
+
 
 
         Transactions::create([
@@ -716,11 +722,6 @@ class ZipitController extends Controller
             $narration = 'Zimswitch Transaction';
         }
 
-
-
-
-
-        dispatch(new ZipitReceive($request->br_account,$request->amount /100,$reference,$request->rrn,$narration));
         return response([
             'code'              => '000',
             'mobile'            => $mobile,

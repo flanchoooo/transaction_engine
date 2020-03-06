@@ -678,7 +678,7 @@ class ReversalController extends Controller
         $br_job->reversed = 'false';
         $br_job->status = 'DRAFT';
         $br_job->version = 0;
-        $br_job->br_reference = $request->transaction_batch_id;
+        $request->tms_batch = $request->transaction_batch_id;
         $br_job->txn_type = REVERSAL;
         $br_job->save();
 

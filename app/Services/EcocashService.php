@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Account;
 use App\BRJob;
+use App\ClientID;
+use App\MobileBankingUsers;
 use GuzzleHttp;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
@@ -13,12 +15,17 @@ use Illuminate\Support\Facades\Log;
 class EcocashService
 {
     public static function sendTransaction($id,$amount,$account_number,$narration,$mobile){
-
         $revenue_account = Account::find(9);
         $tax_account = Account::find(4);
-
         $destination = Account::find(8)->account_number;
         $fees = IBFeesCalculatorService::calculateFees($amount,32,$account_number,$destination);
+        $client_id = ClientID::whereAccountId($account_number)->first();
+        $client = MobileBankingUsers::find($client_id->user_id);
+        if (substr($client->mobile, -9) == substr($mobile, -9)) {
+            $fees['tax_fee'] = 0;
+        }
+
+        $fees['fees_charged'] = $fees['tax_fee'] + $fees['revenue_fee'];
         $source_debit = array(
             'serial_no'          => $id,
             'our_branch_id'      => substr($account_number, 0, 3),
@@ -33,7 +40,7 @@ class EcocashService
             'account_id'         => $account_number,
             'trx_description_id' => '007',
             'trx_description'    => "Ecocash Transfer Fees Debit : $account_number to $mobile",
-            'trx_amount'         => '-' . $fees['fees_charged']);
+            'trx_amount'         => -$fees['fees_charged']);
 
 
         $destination_credit = array('serial_no'          => $id,

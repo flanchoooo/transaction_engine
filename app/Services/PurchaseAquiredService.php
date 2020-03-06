@@ -24,7 +24,7 @@ class PurchaseAquiredService
         $merchant_name = Merchant::find($merchant_id->merchant_id)->name;
         $fees_charged = FeesCalculatorService::calculateFees($amount, '0.00', PURCHASE_BANK_X, $merchant_id->merchant_id,$account_number);
 
-
+        $fees = $fees_charged['acquirer_fee'];
 
         $debit_zimswitch_with_purchase_amnt = array(
             'serial_no'             => $id,
@@ -50,7 +50,7 @@ class PurchaseAquiredService
             'account_id'            => ZIMSWITCH,
             'trx_description_id'    => '007',
             'trx_description'       => "POS SALE Acquirer Fee | $merchant_name | $reference ",
-            'trx_amount'            =>  -$fees_charged['acquirer_fee']);
+            'trx_amount'            =>  - $fees);
 
 
         $credit_revenue = array(
@@ -59,7 +59,7 @@ class PurchaseAquiredService
             'account_id'             => REVENUE,
             'trx_description_id'    => '008',
             'trx_description'       => "POS SALE Acquirer Fee | $merchant_name | $reference ",
-            'trx_amount'            => $fees_charged['acquirer_fee']);
+            'trx_amount'            => $fees);
         try {
 
             $client = new Client();
