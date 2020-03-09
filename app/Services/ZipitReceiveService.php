@@ -19,7 +19,7 @@ class ZipitReceiveService
             'our_branch_id'         => $branch_id,
             'account_id'            => $account_number,
             'trx_description_id'    => '007',
-            'trx_description'       => "SP | Zipit receive | $narration",
+            'trx_description'       => "SP | Zipit receive | $narration | $rrn ",
             'trx_amount'            => $amount);
 
 
@@ -29,7 +29,7 @@ class ZipitReceiveService
             'account_id'            => ZIMSWITCH,
             'trx_description_id'    => '008',
             'trx_description'       => "SP | Zipit receive: $rrn account:$account_number",
-            'trx_amount'            =>   - $amount);
+            'trx_amount'            =>   -$amount);
 
 
         try {

@@ -140,9 +140,11 @@ class BRBalanceController extends Controller
 
         if($running!= 0) {
             LoggingService::message("Another Job is still running");
-            return array(
-
-            );
+            return response ([
+                'status'        => '200',
+                'code'          =>  '05',
+                'message'       => 'Another job is still running'
+            ]);
         }
 
         $configuration->executing=1;
@@ -151,6 +153,13 @@ class BRBalanceController extends Controller
         $configuration->executing=0;
         $configuration->save();
         LoggingService::message("Job finished");
+
+        return response ([
+            'status'        => '200',
+            'code'          =>  '00',
+            'message'       => 'Job successfully processed.'
+        ]);
+
 
     }
 

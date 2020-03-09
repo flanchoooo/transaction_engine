@@ -218,7 +218,7 @@ class ZipitController extends Controller
             );
 
 
-            $response = $this->switchLimitChecks($request->br_account, $request->amount / 100, $fees_result['maximum_daily'], $request->account_number, $fees_result['transaction_count'], $fees_result['max_daily_limit']);
+             $response = $this->switchLimitChecks($request->br_account, $request->amount / 100, $fees_result['maximum_daily'], $request->account_number, $fees_result['transaction_count'], $fees_result['max_daily_limit']);
             if ($response["code"] != '000') {
                 return response([
                     'code' => $response["code"],
@@ -509,7 +509,6 @@ class ZipitController extends Controller
         }
 
 
-
         return array(
             'code' => '000',
             'description' => 'Success',
@@ -517,13 +516,11 @@ class ZipitController extends Controller
         );
     }
 
-
     public function receive(Request $request){
 
-        return HotRechargeService::sendTransaction('23','10','00120200012441','tes','263772288500');
         $account_checker = substr($request->br_account,0, 3);
         $reference                      = $request->rrn;
-        /*$rrn_result = BRJob::where('rrn', $request->rrn)->get()->count();
+        $rrn_result = BRJob::where('rrn', $request->rrn)->get()->count();
         if($rrn_result > 0) {
             return response([
 
@@ -531,8 +528,7 @@ class ZipitController extends Controller
                 'description' => 'Do not honor'
 
             ]);
-        }*/
-
+        }
 
         if ($account_checker == '263') {
             if(WALLET_STATUS != 'ACTIVE'){
@@ -733,8 +729,6 @@ class ZipitController extends Controller
         ]);
 
     }
-
-
 
     protected function zipit_send_validation(Array $data)
     {

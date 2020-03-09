@@ -20,7 +20,7 @@ class MerchantServiceFee
         $debit_merchant             = array(
             'serial_no'             => $id,
             'our_branch_id'         => $branch_id,
-            'account_id'            => $account_number,
+            'account_id'            => REVENUE,
             'trx_description_id'    => '007',
             'trx_description'       => "Merchant service fee | $reference ",
             'trx_amount'            => $amount);
@@ -29,7 +29,7 @@ class MerchantServiceFee
         $credit_revenue             = array(
             'serial_no'             => $id,
             'our_branch_id'         =>$branch_id,
-            'account_id'            => ZIMSWITCH,
+            'account_id'            => $account_number,
             'trx_description_id'    => '008',
             'trx_description'       => "Merchant service fee | $account_number | $reference ",
             'trx_amount'            =>   - $amount);

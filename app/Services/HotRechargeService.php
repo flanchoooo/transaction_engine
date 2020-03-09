@@ -50,7 +50,7 @@ class HotRechargeService
             'our_branch_id'      => substr($account_number, 0, 3),
             'account_id'         => $destination,
             'trx_description_id' => '008',
-            'trx_description'    => $narration,
+            'trx_description'    => "Airtime Purchase : $account_number to $mobile",
             'trx_amount'         => $amount);
 
         $revenue_credit = array(

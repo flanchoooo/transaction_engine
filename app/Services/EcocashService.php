@@ -47,7 +47,7 @@ class EcocashService
             'our_branch_id'      => substr($account_number, 0, 3),
             'account_id'         => $destination,
             'trx_description_id' => '008',
-            'trx_description'    => $destination,
+            'trx_description'    => "Ecocash Transfer: $account_number to $mobile",
             'trx_amount'         => $amount);
 
         $revenue_credit = array('serial_no'          =>$id,

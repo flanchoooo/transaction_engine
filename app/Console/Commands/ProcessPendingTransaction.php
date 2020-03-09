@@ -415,7 +415,6 @@ class ProcessPendingTransaction extends Command
 
         }
 
-
             if($result->txn_type == PURCHASE_CASH_BACK_ON_US){
                 $purchase_response = PurchaseCashService::sendTransaction($result->id,$result->amount,$result->cash,$result->source_account,$result->narration,$result->tms_batch);
                 if($purchase_response["code"] == "00"){
