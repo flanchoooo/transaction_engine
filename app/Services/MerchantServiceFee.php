@@ -22,7 +22,7 @@ class MerchantServiceFee
             'our_branch_id'         => $branch_id,
             'account_id'            => REVENUE,
             'trx_description_id'    => '007',
-            'trx_description'       => "Merchant service fee | $reference ",
+            'trx_description'       => "Merchant service fee | $account_number | $reference ",
             'trx_amount'            => $amount);
 
 
