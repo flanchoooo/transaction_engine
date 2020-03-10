@@ -2,12 +2,7 @@
 
 namespace App\Services;
 
-use App\BRJob;
-use App\Devices;
-use GuzzleHttp;
 use GuzzleHttp\Client;
-use GuzzleHttp\Exception\RequestException;
-use Illuminate\Support\Facades\Log;
 
 
 class MerchantServiceFee
@@ -17,7 +12,7 @@ class MerchantServiceFee
 
 
         $branch_id = substr($account_number, 0, 3);
-        $debit_merchant             = array(
+        $credit_revenue             = array(
             'serial_no'             => $id,
             'our_branch_id'         => $branch_id,
             'account_id'            => REVENUE,
@@ -26,7 +21,7 @@ class MerchantServiceFee
             'trx_amount'            => $amount);
 
 
-        $credit_revenue             = array(
+        $debit_merchant            = array(
             'serial_no'             => $id,
             'our_branch_id'         =>$branch_id,
             'account_id'            => $account_number,
