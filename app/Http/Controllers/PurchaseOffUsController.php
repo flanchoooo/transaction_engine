@@ -29,6 +29,7 @@ use App\Services\LoggingService;
 use App\Services\PurchaseIssuedService;
 use App\Services\SessionToken;
 use App\Services\TokenService;
+use App\Services\UniqueTxnId;
 use App\T_Transactions;
 use App\Transaction;
 use App\Transactions;
@@ -159,7 +160,7 @@ class PurchaseOffUsController extends Controller
                 $br_job->destination_account = TAX;
                 $br_job->status = 'DRAFT';
                 $br_job->version = 0;
-                $br_job->tms_batch = $reference;
+                $br_job->tms_batch = UniqueTxnId::transaction_id();
                 $br_job->narration =  "WALLET | Tax settlement | $reference | $request->account_number |  $request->rrn";
                 $br_job->rrn =$reference;
                 $br_job->txn_type = WALLET_SETTLEMENT;
@@ -173,7 +174,7 @@ class PurchaseOffUsController extends Controller
                 $br_job->destination_account = REVENUE;
                 $br_job->status = 'DRAFT';
                 $br_job->version = 0;
-                $br_job->tms_batch = $reference;
+                $br_job->tms_batch = UniqueTxnId::transaction_id();
                 $br_job->narration =  "WALLET | Revenue settlement | $reference | $request->account_number |  $request->rrn";
                 $br_job->rrn =$reference;
                 $br_job->txn_type = WALLET_SETTLEMENT;
@@ -187,7 +188,7 @@ class PurchaseOffUsController extends Controller
                 $br_job->destination_account = ZIMSWITCH;
                 $br_job->status = 'DRAFT';
                 $br_job->version = 0;
-                $br_job->tms_batch = $reference;
+                $br_job->tms_batch = UniqueTxnId::transaction_id();
                 $br_job->narration =  "WALLET | Switch fee settlement | $reference | $request->account_number |  $request->rrn";
                 $br_job->rrn =$reference;
                 $br_job->txn_type = WALLET_SETTLEMENT;
@@ -201,7 +202,7 @@ class PurchaseOffUsController extends Controller
                 $br_job->destination_account = ZIMSWITCH;
                 $br_job->status = 'DRAFT';
                 $br_job->version = 0;
-                $br_job->tms_batch = $reference;
+                $br_job->tms_batch = UniqueTxnId::transaction_id();
                 $br_job->narration = "WALLET | Pos purchase | $request->rrn |  $request->account_number |  $reference";
                 $br_job->rrn =$reference;
                 $br_job->txn_type = WALLET_SETTLEMENT;
@@ -223,7 +224,7 @@ class PurchaseOffUsController extends Controller
 
                 WalletTransactions::create([
 
-                    'txn_type_id'       => BALANCE_ON_US,
+                    'txn_type_id'       => PURCHASE_OFF_US,
                     'tax'               => '0.00',
                     'revenue_fees'      => '0.00',
                     'interchange_fees'  => '0.00',
@@ -283,7 +284,6 @@ class PurchaseOffUsController extends Controller
 
 
         $deductable_amount =  $fees_charged['fees_charged'] + $request->amount /100;
-        ;
         if($deductable_amount > $balance_res["available_balance"] ){
             PenaltyDeduction::create([
                 'amount'                => ZIMSWITCH_PENALTY_FEE,
