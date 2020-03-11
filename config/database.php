@@ -49,6 +49,7 @@ return [
             'unix_socket' => env('DB_SOCKET', ''),
             'charset' => 'utf8mb4',
             'collation' => 'utf8mb4_unicode_ci',
+            'timezone'  => env('DB_TIMEZONE', '+02:00'),
             'prefix' => '',
             'strict' => true,
             'engine' => null,
