@@ -62,7 +62,7 @@ class WalletSettlementService
 
             }
 
-            LoggingService::message('Wallet transaction processed successfully');
+            LoggingService::message("Wallet transaction processed successfully | $$amount | $id ");
             return array(
                 'code'           => "00",
                 'description'      => $response->transaction_batch_id
