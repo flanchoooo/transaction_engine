@@ -206,11 +206,13 @@ class PurchaseOnUsController extends Controller
                 $br_job->destination_account = REVENUE;
                 $br_job->status = 'DRAFT';
                 $br_job->version = 0;
-                $br_job->tms_batch = $reference;
+                $br_job->tms_batch = UniqueTxnId::transaction_id();
                 $br_job->narration ='WALLET| Fees settlement on purchase on us | ' . $request->account_number . ' ' . $reference;
                 $br_job->rrn =$reference;
                 $br_job->txn_type = WALLET_SETTLEMENT;
                 $br_job->save();
+
+
 
                 $br_job = new BRJob();
                 $br_job->txn_status = 'PENDING';
@@ -219,7 +221,7 @@ class PurchaseOnUsController extends Controller
                 $br_job->destination_account = TAX;
                 $br_job->status = 'DRAFT';
                 $br_job->version = 0;
-                $br_job->tms_batch =$reference;
+                $br_job->tms_batch =UniqueTxnId::transaction_id();
                 $br_job->narration ='WALLET| Tax settlement on purchase on us | ' . $request->account_number . ' ' . $reference;
                 $br_job->rrn =$reference;
                 $br_job->txn_type = WALLET_SETTLEMENT;
@@ -232,7 +234,7 @@ class PurchaseOnUsController extends Controller
                 $br_job->destination_account =  $merchant_account->account_number;
                 $br_job->status = 'DRAFT';
                 $br_job->version = 0;
-                $br_job->tms_batch = $reference;
+                $br_job->tms_batch = UniqueTxnId::transaction_id();
                 $br_job->narration ='WALLET| Merchant settlement on purchase on us | ' . $request->account_number . ' ' . $reference;
                 $br_job->rrn =$reference;
                 $br_job->txn_type = WALLET_SETTLEMENT;
@@ -245,7 +247,7 @@ class PurchaseOnUsController extends Controller
                 $br_job->destination_account =  REVENUE;
                 $br_job->status = 'DRAFT';
                 $br_job->version = 0;
-                $br_job->tms_batch = $reference;
+                $br_job->tms_batch = UniqueTxnId::transaction_id();
                 $br_job->narration ='WALLET | Merchant service fees | ' . $request->account_number . ' ' . $reference;
                 $br_job->rrn =$reference;
                 $br_job->txn_type = WALLET_SETTLEMENT;
@@ -285,9 +287,9 @@ class PurchaseOnUsController extends Controller
 
             } catch (\Exception $e) {
 
-                DB::rollBack();
-                Log::debug('Account Number:' . $request->account_number . ' ' . $e);
 
+                return $e;
+                DB::rollBack();
                 WalletTransactions::create([
 
                     'txn_type_id' => PURCHASE_ON_US,
@@ -400,7 +402,7 @@ class PurchaseOnUsController extends Controller
             $br_jobs->source_account = $merchant_account->account_number;
             $br_jobs->status = 'DRAFT';
             $br_jobs->version = 0;
-            $br_jobs->tms_batch = $reference;
+            $br_jobs->tms_batch =  UniqueTxnId::transaction_id();
             $br_jobs->narration = $request->imei;
             $br_jobs->rrn = $reference;
             $br_jobs->txn_type = MDR_DEDUCTION;
