@@ -235,7 +235,7 @@ class WalletSendMoneyController extends Controller
                 $br_job->destination_account = TAX;
                 $br_job->status = 'DRAFT';
                 $br_job->version = 0;
-                $br_job->tms_batch = $reference;
+                $br_job->tms_batch = UniqueTxnId::transaction_id();
                 $br_job->narration = "WALLET |Tax settlement |$reference | $request->source_mobile";
                 $br_job->rrn =$reference;
                 $br_job->txn_type = WALLET_SETTLEMENT;
@@ -248,7 +248,7 @@ class WalletSendMoneyController extends Controller
                 $br_job->destination_account = REVENUE;
                 $br_job->status = 'DRAFT';
                 $br_job->version = 0;
-                $br_job->tms_batch = $reference;
+                $br_job->tms_batch = UniqueTxnId::transaction_id();
                 $br_job->narration = "WALLET | Revenue settlement |$reference | $request->source_mobile";
                 $br_job->rrn =$reference;
                 $br_job->txn_type = WALLET_SETTLEMENT;
