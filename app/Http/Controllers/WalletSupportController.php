@@ -63,8 +63,8 @@ class WalletSupportController extends Controller
             $tax = $item['tax'];
             $fees = $item['revenue_fees'];
             $temp = array(
-                'trx_date'      =>\Carbon\Carbon::parse($txn_type->created_at)->format('d/m/Y'),
-                'value_date'    =>\Carbon\Carbon::parse($txn_type->created_at)->format('d/m/Y'),
+                'trx_date'      =>\Carbon\Carbon::parse($item->created_at)->format('d M Y'),
+                'value_date'    =>\Carbon\Carbon::parse($item->created_at)->format('d M Y'),
                 'particulars'   => "$txn_type->name | Fees:$fees | ". $item['reversed'],
                 'debit'         => $item['total_debited'],
                 'credit'        => $item['total_credited'],
