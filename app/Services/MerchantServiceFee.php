@@ -1,15 +1,12 @@
 <?php
 
 namespace App\Services;
-
 use GuzzleHttp\Client;
 
 
 class MerchantServiceFee
 {
     public static function sendTransaction($id,$amount,$account_number,$reference){
-
-
 
         $branch_id = substr($account_number, 0, 3);
         $credit_revenue             = array(
@@ -27,7 +24,7 @@ class MerchantServiceFee
             'account_id'            => $account_number,
             'trx_description_id'    => '008',
             'trx_description'       => "Merchant service fee | $account_number | $reference ",
-            'trx_amount'            =>   - $amount);
+            'trx_amount'            =>   -$amount);
 
         $response =  DuplicateTxnCheckerService::check($id);
         if($response["code"] != "00"){

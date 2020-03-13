@@ -184,10 +184,7 @@ class BalanceOffUsController extends Controller
 
             } catch (\Exception $e) {
                 DB::rollBack();
-                Log::debug('Account Number:'. $request->card_number.' '. $e);
-
                 WalletTransactions::create([
-
                     'txn_type_id'       => BALANCE_ENQUIRY_OFF_US,
                     'merchant_id'       => HQMERCHANT,
                     'transaction_status'=> 0,

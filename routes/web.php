@@ -44,6 +44,7 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
     $app->post('balance',  'BalanceOnUsController@balance');
     $app->post('br_balance',  'BRBalanceController@br_balance');
     $app->post('post_transaction',  'BRBalanceController@post_transaction');
+    $app->post('update_transaction',  'BRBalanceController@update_transaction');
     $app->get('post_pending_transaction',  'BRBalanceController@post_pending_transaction');
     $app->post('balance_off_us',  'BalanceOffUsController@balance_off_us');
     $app->get('balance_bank_x',  'BalanceBankXController@balance');

@@ -103,7 +103,7 @@ class ZipitSendService
 
             }
 
-            LoggingService::message('Zipit send transaction processed successfully' . $account_number);
+            LoggingService::message("Zipit send transaction processed successfully | $account_number |  $id" );
             return array(
                 'code' => "00",
                 'description' => $response->transaction_batch_id

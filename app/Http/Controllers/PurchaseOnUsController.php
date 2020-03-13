@@ -349,7 +349,7 @@ class PurchaseOnUsController extends Controller
                 ]);
             }
 
-            $available_balance = round($balance_res["available_balance"], 2) * 100;
+            $available_balance = $balance_res["available_balance"];
             $total_funds = $fees_charged['fees_charged'] + ($request->amount / 100);
             if ($total_funds > $available_balance) {
                 LoggingService::message('Insufficient funds' . $request->account_number);

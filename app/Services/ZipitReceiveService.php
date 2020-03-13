@@ -19,7 +19,7 @@ class ZipitReceiveService
             'our_branch_id'         => $branch_id,
             'account_id'            => $account_number,
             'trx_description_id'    => '007',
-            'trx_description'       => "SP | Zipit receive | $narration | $rrn |$reference ",
+            'trx_description'       => "SP | Zipit receive |$narration | $rrn",
             'trx_amount'            => $amount);
 
 
@@ -28,7 +28,7 @@ class ZipitReceiveService
             'our_branch_id'         =>$branch_id,
             'account_id'            => ZIMSWITCH,
             'trx_description_id'    => '008',
-            'trx_description'       => "SP | Zipit receive | $rrn |$account_number | $reference",
+            'trx_description'       => "SP | Zipit receive  | $narration | $rrn",
             'trx_amount'            =>   -$amount);
 
 
@@ -54,7 +54,7 @@ class ZipitReceiveService
 
             }
 
-            LoggingService::message("Zipit receive transaction processed successfully |$account_number| $id ");
+            LoggingService::message("Zipit receive transaction processed successfully | $account_number | $rrn |  $id ");
             return array(
                 'code'           => "00",
                 'description'      => $response->transaction_batch_id

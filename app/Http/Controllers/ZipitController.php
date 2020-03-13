@@ -94,19 +94,13 @@ class ZipitController extends Controller
                     ]);
                 }
 
-                if ($fees_charged['minimum_balance'] > $fromAccount->balance) {
-                    WalletTransactions::create([
-                        'txn_type_id'       => BALANCE_ON_US,
-                        'merchant_id'       => HQMERCHANT,
-                        'transaction_status'=> 0,
-                        'description'       => 'Insufficient funds for mobile:' . $request->account_number,
 
 
-                    ]);
-
+                 $total_funds = $fees_charged['fees_charged'] + ($request->amount / 100);
+                if ($total_funds > $fromAccount->balance) {
                     return response([
                         'code' => '116',
-                        'description' => 'Insufficient funds',
+                        'description' => "Insufficient funds",
                     ]);
                 }
 
@@ -124,7 +118,7 @@ class ZipitController extends Controller
                 $br_job->destination_account = TAX;
                 $br_job->status = 'DRAFT';
                 $br_job->version = 0;
-                $br_job->tms_batch =$reference;
+                $br_job->tms_batch =UniqueTxnId::transaction_id();
                 $br_job->narration ="WALLET | Zipit send tax | $reference | RRN:$request->rrn" ;
                 $br_job->rrn =$request->rrn;
                 $br_job->txn_type = WALLET_SETTLEMENT;
@@ -137,7 +131,7 @@ class ZipitController extends Controller
                 $br_job->destination_account = REVENUE;
                 $br_job->status = 'DRAFT';
                 $br_job->version = 0;
-                $br_job->tms_batch =$reference;
+                $br_job->tms_batch =UniqueTxnId::transaction_id();
                 $br_job->narration ="WALLET | Zipit send revenue | $reference | RRN:$request->rrn" ;
                 $br_job->rrn =$request->rrn;
                 $br_job->txn_type = WALLET_SETTLEMENT;
@@ -150,7 +144,7 @@ class ZipitController extends Controller
                 $br_job->destination_account = ZIMSWITCH;
                 $br_job->status = 'DRAFT';
                 $br_job->version = 0;
-                $br_job->tms_batch =$reference;
+                $br_job->tms_batch =UniqueTxnId::transaction_id();
                 $br_job->narration = "WALLET | Transaction amount , Zipit Send | $reference  RRN:$request->rrn"  ;
                 $br_job->rrn =$request->rrn;
                 $br_job->txn_type = WALLET_SETTLEMENT;
@@ -189,6 +183,7 @@ class ZipitController extends Controller
 
 
             } catch (\Exception $e) {
+                return $e;
                 DB::rollBack();
                 WalletTransactions::create([
                     'merchant_id'       => HQMERCHANT,
@@ -665,6 +660,11 @@ class ZipitController extends Controller
             ]);
         }
 
+        if(isset($request->narration)){
+            $narration = $request->narration;
+        }else{
+            $narration = 'Zimswitch Transaction';
+        }
 
         $br_job = new BRJob();
         $br_job->txn_status = 'PENDING';
@@ -672,6 +672,7 @@ class ZipitController extends Controller
         $br_job->source_account =$request->br_account;
         $br_job->status = 'DRAFT';
         $br_job->version = 0;
+        $br_job->narration = $narration;
         $br_job->tms_batch = $reference;
         $br_job->updated_at = '2014-01-01 00:00:01';
         $br_job->rrn = $request->rrn;
@@ -712,11 +713,7 @@ class ZipitController extends Controller
             'type'                  =>'RECEIVE',
         ]);
 
-        if(isset($request->narration)){
-            $narration = $request->narration;
-        }else{
-            $narration = 'Zimswitch Transaction';
-        }
+
 
         return response([
             'code'              => '000',
