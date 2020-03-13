@@ -120,7 +120,7 @@ class PurchaseCashOnUsController extends Controller
                 $br_jobs->source_account = $merchant_account->account_number;
                 $br_jobs->status = 'DRAFT';
                 $br_jobs->version = 0;
-                $br_jobs->tms_batch = $reference;
+                $br_jobs->tms_batch =  UniqueTxnId::transaction_id();
                 $br_jobs->narration = $request->imei;
                 $br_jobs->rrn = $reference;
                 $br_jobs->txn_type = MDR_DEDUCTION;
