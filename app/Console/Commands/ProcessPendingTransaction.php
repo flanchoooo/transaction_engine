@@ -272,7 +272,7 @@ class ProcessPendingTransaction extends Command
             }
 
             if($result->txn_type == BR_AIRTIME){
-                $purchase_response = HotRechargeService::sendTransaction($result->id,$result->amount,$result->source_account,$result->narration,);
+                $purchase_response = HotRechargeService::sendTransaction($result->id,$result->amount,$result->source_account,$result->narration,$result->mobile);
                 if($purchase_response["code"] == "00"){
                     $result->txn_status = "COMPLETED";
                     $result->updated_at = Carbon::now();
