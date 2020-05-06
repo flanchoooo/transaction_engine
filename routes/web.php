@@ -12,7 +12,7 @@
 */
 
 $router->get('/', function () use ($router) {
-    return 'Secure-pay-txn' .'  '. $router->app->version();
+    return 'ADVANCE-BANK-WALLET-SERVICE: AUTHOR: FLAVIAN .T. MACHIMBIRIKE' .'  '. $router->app->version();
 });
 
 

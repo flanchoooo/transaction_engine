@@ -44,6 +44,7 @@ class WalletSignUpController extends Controller
             $wallet->gender         = $request->gender;
             $wallet->national_id    = $request->national_id;
             $wallet->qr_reference   = Carbon::now()->timestamp;;
+            $wallet->verified       = 0;
             $wallet->save();
             DB::commit();
 
