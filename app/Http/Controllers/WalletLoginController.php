@@ -111,15 +111,11 @@ class WalletLoginController extends Controller
                 ]);
             }
 
-            if($wallet->state != "ACTIVE"){
                 return response([
                     'code'          => '000',
                     'description'   => 'Preauth successful.',
                     'data'          => $wallet
                 ]);
-            }
-
-
 
         }catch (\Exception $exception){
             DB::rollback();
