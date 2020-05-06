@@ -15,6 +15,7 @@ use App\MerchantAccount;
 use App\PendingTxn;
 use App\Services\BalanceIssuedService;
 use App\Services\CashAquiredService;
+use App\Services\CashWithdrawalService;
 use App\Services\DuplicateTxnCheckerService;
 use App\Services\EcocashService;
 use App\Services\ElectricityService;
@@ -150,6 +151,30 @@ class ProcessPendingTransaction extends Command
             }
 
 
+
+        if($result->txn_type == CASH_WITHDRAWAL){
+            $purchase_response = CashWithdrawalService::sendTransaction($result->id,$result->amount,$result->source_account,$result->destination_account,$result->narration);
+            if($purchase_response["code"] == "00"){
+                $result->txn_status = "COMPLETED";
+                $result->updated_at = Carbon::now();
+                $result->br_reference = $purchase_response["description"];
+                $result->save();
+                return array(
+                    'code'           => '00',
+                    'description'   => 'Successfully processed the transaction'
+                );
+            }else{
+                $result->updated_at = Carbon::now();
+                $result->response = $purchase_response["description"];
+                $result->save();
+                return array(
+                    'code'                  => '01',
+                    'description'           => 'Transaction successfully processed',
+
+                );
+            }
+
+        }
 
             if($result->txn_type == PURCHASE_OFF_US){
                 $purchase_response = PurchaseIssuedService::sendTransaction($result->id,$result->amount,$result->source_account,$result->narration,$result->rrn,$result->tms_batch);

@@ -40,6 +40,7 @@ $router->get('/', function () use ($router) {
 $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
 
 
+    /*
     //Balance Enquiry
     $app->post('balance',  'BalanceOnUsController@balance');
     $app->post('br_balance',  'BRBalanceController@br_balance');
@@ -142,9 +143,22 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
     $app->get('/disburse/cancel',  'WalletDisbursementsController@cancel');
     $app->get('/disburse/reports',  'WalletDisbursementsController@reports');
 
+    */
+
+    //Wallet Operations
+    $app->post('wallet_sign_up',  'WalletSignUpController@wallet_sign_up');
+    $app->post('login',  'WalletLoginController@login');
+    $app->post('preauth',  'WalletLoginController@preauth');
+    $app->post('change_pin',  'WalletSignUpController@changePin');
 
 
 
+
+
+});
+
+$router->get('/key', function() {
+    return \Illuminate\Support\Str::random(32);
 });
 
 

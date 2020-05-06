@@ -77,7 +77,6 @@ class WalletSupportController extends Controller
         }
 
 
-
         return response([
             'code'                       => '00',
             'description'                => 'success',
