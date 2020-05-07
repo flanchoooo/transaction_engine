@@ -17,7 +17,7 @@ class Wallet extends Model implements Authenticatable
 
     use AuthenticableTrait;
     protected $guarded = [];
-    protected $hidden = ['pin','commissions','device_uuid','created_at','updated_at'];
+    protected $hidden = ['id','pin','commissions','device_uuid','created_at','updated_at'];
     protected $table = 'wallet';
 
 }

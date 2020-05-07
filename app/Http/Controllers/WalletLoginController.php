@@ -2,12 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\OTP;
 use App\Services\AESEncryption;
-use App\Services\OtpService;
+use App\Services\OTPService;
 use App\Wallet;
-use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
@@ -25,72 +24,53 @@ class WalletLoginController extends Controller
         try {
             $wallet = Wallet::whereMobile($request->mobile)->first();
             if(!isset($wallet)){
-                return response([
-                    'code' => '100',
-                    'description' => 'Invalid login credentials',
-                ]);
+                return response(['code' => '100', 'description' => 'Invalid login credentials']);
             }
 
             if($wallet->state != "ACTIVE"){
-                return response([
-                    'code' => '117',
-                    'description' => 'Account is blocked',
-                ]);
+                return response(['code' => '100', 'description' => 'Account is blocked',]);
             }
 
             if($wallet->auth_attempts > 2){
                 $wallet->state = "BLOCKED";
                 $wallet->save();
                 DB::commit();
-                return response([
-                    'code' => '117',
-                    'description' => 'Account is blocked',
-                ]);
+                return response(['code' => '100', 'description' => 'Account is blocked']);
             }
-
-            /*if($wallet->device_uuid != $request->device_uuid){
-                return response([
-                    'code' => '100',
-                    'description' => 'Device is not trusted',
-                ]);
-            }*/
 
             $pin = AESEncryption::decrypt($request->pin);
             if($pin["pin"] == false){
                 $wallet->auth_attempts+=1;
                 $wallet->save();
                 DB::commit();
-                return response([
-                    'code' => '807',
-                    'description' => 'Invalid login credentials',
-                ]);
+                return response(['code' => '807', 'description' => 'Invalid login credentials']);
             }
 
             if (Hash::check($pin["pin"], $wallet->pin)) {
-                $wallet->auth_attempts = 0;
-                $wallet->save();
-                return response([
-                    'code'          => '000',
-                    'description'   => 'Login successful',
-                    'data'          => $wallet
-                ]);
-            }
 
+
+                if($wallet->device_uuid != $request->device_uuid){
+                    return response(['code' => '112', 'description' => 'Please provide OTP',]);
+                }
+
+                if($wallet->verified != 1){
+                    return response(['code' => '113', 'description' => 'Please provide OTP',]);
+                }
+                $wallet->auth_attempts = 0;
+                $wallet->verified = 1;
+                $wallet->save();
+                DB::commit();
+                return response(['code' => '000', 'description' => 'Login successful', 'data'=> $wallet]);
+            }
 
             $wallet->auth_attempts+=1;
             $wallet->save();
             DB::commit();
-            return response([
-                'code' => '902',
-                'description' => 'Invalid login credentials',
-            ]);
+            return response(['code' => '100','description' => 'Invalid login credentials',]);
 
         }catch (\Exception $exception){
             DB::rollback();
-            return response([
-                'code' => '100',
-                'description' => 'Login Failed.',
-            ]);
+            return response(['code' => '100', 'description' => 'Login Failed.',]);
         }
 
     }
@@ -102,27 +82,87 @@ class WalletLoginController extends Controller
         }
         DB::beginTransaction();
         try {
-
             $wallet = Wallet::whereMobile($request->mobile)->first();
             if(!isset($wallet)){
-                return response([
-                    'code' => '100',
-                    'description' => 'Wallet account is not registered.',
-                ]);
+                return response(['code' => '100', 'description' => 'Wallet account is not registered.',]);
             }
-
-                return response([
-                    'code'          => '000',
-                    'description'   => 'Preauth successful.',
-                    'data'          => $wallet
-                ]);
-
+            return response(['code'          => '000','description'   => 'Preauth successful.', 'data' => $wallet]);
         }catch (\Exception $exception){
             DB::rollback();
-            return response([
-                'code' => '100',
-                'description' => 'Your request could not be processed.',
-            ]);
+            return response(['code' => '100', 'description' => 'Your request could not be processed.',]);
+        }
+
+    }
+
+    public function validateOtp(Request $request){
+        $validator = $this->otp_validation($request->all());
+        if ($validator->fails()) {
+            return response()->json(['code' => '99', 'description' => $validator->errors()]);
+        }
+        DB::beginTransaction();
+        try {
+            $wallet = Wallet::whereMobile($request->mobile)->first();
+            $saved_otp = OTP::whereMobile($request->mobile)->first();
+            if(!isset($wallet)){
+                return response(['code' => '100', 'description' => 'Wallet account is not registered.',]);
+            }
+
+            if($wallet->state != "ACTIVE"){
+                return response(['code' => '100', 'description' => 'Account is blocked',]);
+            }
+
+            if($wallet->auth_attempts > 2){
+                $wallet->state = "BLOCKED";
+                $wallet->save();
+                DB::commit();
+                return response(['code' => '100', 'description' => 'Account is blocked']);
+            }
+
+
+            if(!isset($saved_otp)){
+                return response(['code' => '100', 'description' => 'Invalid mobile',]);
+            }
+
+            if ($saved_otp["otp"] != $request->otp) {
+                if($saved_otp->attempts > 2){
+                    $wallet->state = "BLOCKED";
+                    $wallet->verified = 0;
+                    $wallet->save();
+                    DB::commit();
+                }
+                $saved_otp->attempts +=1;
+                $saved_otp->save();
+                DB::commit();
+                return response(['code' => '100', 'description' => 'Invalid OTP',]);
+            }
+
+            $pin = AESEncryption::decrypt($request->pin);
+            if($pin["pin"] == false){
+                $wallet->auth_attempts+=1;
+                $wallet->save();
+                DB::commit();
+                return response(['code' => '807', 'description' => 'Invalid credentials']);
+            }
+
+            if (!Hash::check($pin["pin"], $wallet->pin)) {
+                $wallet->auth_attempts +=1;
+                $wallet->save();
+                DB::commit();
+                return response(['code' => '000', 'description' => 'Invalid  credentials', 'data'=> $wallet]);
+            }
+
+
+            $wallet->auth_attempts =0;
+            $wallet->verified =1;
+            $wallet->save();
+
+            $saved_otp->attempts=0;
+            $saved_otp->save();
+            DB::commit();
+            return response(['code'     => '000','description'   => 'OTP successfully verified', 'data' => $wallet]);
+        }catch (\Exception $exception){
+            DB::rollback();
+            return response(['code' => '100', 'description' => 'Your request could not be processed.',]);
         }
 
     }
@@ -134,8 +174,6 @@ class WalletLoginController extends Controller
             'pin'               => 'required',
             'device_uuid'       => 'required',
         ]);
-
-
     }
 
     protected function wallet_preauth(Array $data)
@@ -143,7 +181,15 @@ class WalletLoginController extends Controller
         return Validator::make($data, [
             'mobile'            => 'required | string |min:0|max:20',
         ]);
+    }
 
+    protected function otp_validation(Array $data)
+    {
+        return Validator::make($data, [
+            'mobile'            => 'required | string |min:0|max:20',
+            'otp'               => 'required',
+            'pin'               => 'required',
+        ]);
     }
 
 }

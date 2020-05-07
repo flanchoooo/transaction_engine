@@ -150,15 +150,15 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
     $app->post('login',  'WalletLoginController@login');
     $app->post('preauth',  'WalletLoginController@preauth');
     $app->post('change_pin',  'WalletSignUpController@changePin');
+    $app->post('validate_otp',  'WalletLoginController@validateOtp');
 
-
+    //Send Money
+    $app->post('send_money',  'WalletSendMoneyController@sendMoney');
 
 
 
 });
 
-$router->get('/key', function() {
-    return \Illuminate\Support\Str::random(32);
-});
+
 
 

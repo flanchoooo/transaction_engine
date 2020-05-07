@@ -12,4 +12,9 @@ namespace App\Http\Controllers;
 class WalletTransaction
 {
 
+    public static function generateMobileOtp($user_id, $type){
+        $otp = strtoupper(bin2hex(openssl_random_pseudo_bytes(3)));
+
+    }
+
 }

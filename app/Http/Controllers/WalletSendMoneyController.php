@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 use App\Accounts;
 use App\BRJob;
 use App\Deduct;
+use App\Fee;
 use App\Jobs\Notify;
 use App\Jobs\NotifyBills;
 use App\Jobs\SaveWalletTransaction;
@@ -13,6 +14,7 @@ use App\Jobs\SendMoneyJob;
 use App\Jobs\WalletSendMoneyJob;
 use App\License;
 use App\ManageValue;
+use App\Services\AESEncryption;
 use App\Services\FeesCalculatorService;
 use App\Services\SmsNotificationService;
 use App\Services\TsambaService;
@@ -27,6 +29,7 @@ use Carbon\Carbon;
 use GuzzleHttp\Client;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
@@ -37,329 +40,171 @@ class WalletSendMoneyController extends Controller
 {
 
 
-
-
-    public function send_money_preauth(Request $request){
-
-         $validator = $this->wallet_preauth($request->all());
-         if ($validator->fails()) {
-           return response()->json(['code' => '99', 'description' => $validator->errors()]);
-
-         }
-
-         //Declarations
-         $destination = Wallet::where('mobile',$request->destination_mobile)->get()->first();
-         $source = Wallet::where('mobile', $request->source_mobile)->get()->first();
-
-         if(!isset($source)){
-             return response([
-                'code' => '01',
-                'description' => 'Source mobile not registered.',
-            ]) ;
-
-         }
-
-         if($source->state == '0') {
-             return response([
-                 'code' => '02',
-                 'description' => 'Source account is blocked',
-             ]);
-         }
-
-        if(!isset($destination)){
-            return response([
-                'code' => '05',
-                'description' => 'Destination mobile not registered.',
-            ]) ;
-
-
-        }
-
-        if($source->mobile == $destination->mobile){
-            return response([
-                'code' => '07',
-                'description' => 'Invalid transaction',
-            ]);
-
-        }
-
-
-        return response([
-            'code' => '00',
-            'description' =>'Pre-auth successful',
-            'recipient_info' =>$destination,
-            ]);
-
-    }
-
-    public function send_money(Request $request){
-
+    public function sendMoney(Request $request){
         $validator = $this->wallet_send_money($request->all());
         if ($validator->fails()) {
             return response()->json(['code' => '99', 'description' => $validator->errors()]);
-
         }
 
-        if(WALLET_STATUS != 'ACTIVE'){
-            return response([
-                'code'          => '100',
-                'description'   => 'Wallet service is temporarily unavailable',
-            ]);
+       if($request->source_mobile == $request->destination_mobile) {
+            return response(['code' => '100', 'description' => 'Transaction request is not permitted.',]);
         }
 
-        if($request->source_mobile == $request->destination_mobile ){
-            return response([
-                'code' => '100',
-                'description' => 'Invalid Transaction',
-            ]);
-        }
-
-            DB::beginTransaction();
+           DB::beginTransaction();
             try {
 
-                $fromQuery   = Wallet::whereMobile($request->source_mobile);
-                $destination_mobile = Wallet::whereMobile($request->destination_mobile);
+                $source              = Wallet::whereMobile($request->source_mobile)->lockForUpdate()->first();
+                $destination         = Wallet::whereMobile($request->destination_mobile)->lockForUpdate()->first();
 
-                $amount_in_cents =  $request->amount / 100;
-                $wallet_fees = WalletFeesCalculatorService::calculateFees(
-                    $amount_in_cents, SEND_MONEY
 
-                );
 
-                if($amount_in_cents > $wallet_fees['maximum_daily']   ){
-                    return response([
-                        'code'          => '08',
-                        'description'   => 'Amount exceed transactional limits.'
-                    ]);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                $pin = AESEncryption::decrypt($request->pin);
+                if($pin["pin"] == false){
+                    $source->auth_attempts+=1;
+                    $source->save();
+                    DB::commit();
+                    return response(['code' => '807', 'description' => 'Invalid credentials']);
                 }
 
-                 $total_deductions = $amount_in_cents + $wallet_fees['fee'] + $wallet_fees['tax'];
-                 $fromAccount = $fromQuery->lockForUpdate()->first();
-                if ($total_deductions > $fromAccount->balance) {
-                    WalletTransactions::create([
-                        'txn_type_id'       => SEND_MONEY,
-                        'description'       => 'Insufficient funds for mobile:' . $request->account_number,
-                    ]);
-
-                    return response([
-                        'code' => '116',
-                        'description' => 'Insufficient funds',
-                    ]);
+                if (!Hash::check($pin["pin"], $source->pin)) {
+                    $source->auth_attempts += 1;
+                    $source->save();
+                    DB::commit();
+                    return response(['code' => '100', 'description' => 'Invalid credentials']);
                 }
 
-                //Check Daily Spent
-                $daily_spent =  WalletTransactions::where('account_debited', $request->source_mobile)
-                    ->where('created_at', '>', Carbon::now()->subDays(1))
-                    ->sum('total_debited');
-
-                //Check Monthly Spent
-                $monthly_spent =  WalletTransactions::where('account_debited', $request->source_mobile)
-                    ->where('created_at', '>', Carbon::now()->subDays(30))
-                    ->sum('total_debited');
-
-
-                $wallet_cos = WalletCOS::find($fromAccount->wallet_cos_id);
-                if($wallet_cos->maximum_daily <  $daily_spent){
-                    return response([
-                        'code' => '902',
-                        'description' => 'Daily limit reached'
-                    ]);
+                $wallet_fees = WalletFeesCalculatorService::calculateFees($request->amount,SEND_MONEY);
+                if($wallet_fees["code"] != "00"){
+                    return response(['code'=> '100', 'description' => 'Invalid transaction amount.']);
                 }
 
-
-                if($wallet_cos->maximum_monthly <  $monthly_spent){
-                    return response([
-                        'code' => '902',
-                        'description' => 'Monthly limit reached'
-                    ]);
+                $total_deductions = $wallet_fees["fees_charged"] + $request->amount;
+                if ($total_deductions > $source->balance) {
+                    return response(['code' => '116','description' => 'Insufficient funds',]);
                 }
 
-                if($wallet_cos->maximum_monthly <  $request->amount / 100){
-                    return response([
-                        'code' => '902',
-                        'description' => 'Cannot perform transaction above monthly limit'
-                    ]);
+                $limit_checker = $this->limit_checker($request->source_mobile,$source->wallet_cos_id,$source->balance,$total_deductions);
+                if($limit_checker["code"] != 00){
+                    return response(['code' => $limit_checker["code"],'description' => $limit_checker["description"],]);
                 }
 
-                //Fee Deductions.
-                $fromAccount->balance -= $total_deductions;
-                $fromAccount->save();
+                $reference = 'SM'.Carbon::now()->timestamp;
+                $source_balance_before = $source->balance;
+                $source_balance_after  = $source->balance - $total_deductions;
+                $destination_balance_before = $destination->balance;
+                $destination_balance_after  = $destination->balance + $request->amount;
 
-                $receiving_wallet = $destination_mobile->lockForUpdate()->first();
-                $receiving_wallet->balance += $amount_in_cents;
-                $receiving_wallet->save();
+                $source->balance -= $total_deductions;
+                $source->save();
+                $destination->balance += $request->amount;
+                $destination->save();
 
-                $source_new_balance             = $fromAccount->balance;
-                $reference                      = UniqueTxnId::transaction_id();
                 $transaction                    = new WalletTransactions();
                 $transaction->txn_type_id       = SEND_MONEY;
                 $transaction->tax               =  $wallet_fees['tax'];
-                $transaction->revenue_fees      =  $wallet_fees['fee'];
-                $transaction->zimswitch_fee     = '0.00';
-                $transaction->transaction_amount= $amount_in_cents;
-                $transaction->total_debited     = $total_deductions;
-                $transaction->total_credited    = '0.00';
-                $transaction->switch_reference  = $reference;
-                $transaction->batch_id          = $reference;
-                $transaction->transaction_status= 1;
+                $transaction->fees              =  $wallet_fees['revenue_fees'];
+                $transaction->transaction_amount= $request->amount;
+                $transaction->transaction_status = "APPROVED";
+                $transaction->transaction_reference= $reference;
                 $transaction->account_debited   = $request->source_mobile;
                 $transaction->account_credited  = $request->destination_mobile;
-                $transaction->balance_after_txn = $source_new_balance;
                 $transaction->description       = 'Transaction successfully processed.';
+                $transaction->reversed          = 0;
+                $transaction->balance_before    = $source_balance_before;
+                $transaction->balance_after     = $source_balance_after;
                 $transaction->save();
 
-                $source_new_balance_            = $receiving_wallet->balance;
                 $transaction                    = new WalletTransactions();
                 $transaction->txn_type_id       = MONEY_RECEIVED;
-                $transaction->tax               = '0.00';
-                $transaction->revenue_fees      = '0.00';
-                $transaction->zimswitch_fee     = '0.00';
-                $transaction->transaction_amount= $amount_in_cents;
-                $transaction->total_debited     = '0.00';
-                $transaction->total_credited    = $amount_in_cents;
-                $transaction->switch_reference  = $reference;
-                $transaction->batch_id          = $reference;
-                $transaction->transaction_status= 1;
+                $transaction->tax               = '0.0000';
+                $transaction->fees              = '0.0000';;
+                $transaction->transaction_amount= $request->amount;
+                $transaction->transaction_status = "APPROVED";
+                $transaction->transaction_reference= $reference;
                 $transaction->account_debited   = $request->source_mobile;
                 $transaction->account_credited  = $request->destination_mobile;
-                $transaction->balance_after_txn = $source_new_balance_;
                 $transaction->description       = 'Transaction successfully processed.';
+                $transaction->reversed          = 0;
+                $transaction->balance_before    = $destination_balance_before;
+                $transaction->balance_after     = $destination_balance_after;
                 $transaction->save();
 
-
-
-                $br_job = new BRJob();
-                $br_job->txn_status = 'PENDING';
-                $br_job->amount = $wallet_fees['tax'];
-                $br_job->source_account = TRUST_ACCOUNT;
-                $br_job->destination_account = TAX;
-                $br_job->status = 'DRAFT';
-                $br_job->version = 0;
-                $br_job->tms_batch = UniqueTxnId::transaction_id();
-                $br_job->narration = "WALLET |Tax settlement |$reference | $request->source_mobile";
-                $br_job->rrn =$reference;
-                $br_job->txn_type = WALLET_SETTLEMENT;
-                $br_job->save();
-
-                $br_job = new BRJob();
-                $br_job->txn_status = 'PENDING';
-                $br_job->amount = $wallet_fees['fee'];
-                $br_job->source_account = TRUST_ACCOUNT;
-                $br_job->destination_account = REVENUE;
-                $br_job->status = 'DRAFT';
-                $br_job->version = 0;
-                $br_job->tms_batch = UniqueTxnId::transaction_id();
-                $br_job->narration = "WALLET | Revenue settlement |$reference | $request->source_mobile";
-                $br_job->rrn =$reference;
-                $br_job->txn_type = WALLET_SETTLEMENT;
-                $br_job->save();
-
-
-               DB::commit();
-
-                /*$amount = money_format('$%i', $amount_in_cents);
-                $sender_balance = money_format('$%i', $source_new_balance);
-                $receiver_balance =money_format('$%i', $source_new_balance_);
-                $sender_name  =  $fromAccount->first_name.' '.$fromAccount->last_name;
-
-                $receiver_name = $receiving_wallet->first_name.' '.$receiving_wallet->last_name;
-               dispatch(new NotifyBills(
-                       $request->source_mobile,
-                       "Transfer to $receiver_name  of $amount was successful. New wallet balance ZWL $sender_balance. Reference:$reference",
-                       'GetBucks',
-                       $request->destination_mobile,
-                       "You have received  $amount from  $sender_name. New wallet balance ZWL $receiver_balance. Reference:$reference",
-                       '2'
-                   )
-               );*/
-
-
+                DB::commit();
                 return response([
-                    'code'          => '000',
-                    'batch_id'      => "$reference",
-                    'description'   => 'Success'
+                    'code'                       => '000',
+                    'transaction_reference'      => "$reference",
+                    'description'                => 'Transfer successfully processed.'
                 ]);
-
 
             } catch (\Exception $e) {
-                return $e;
                 DB::rollBack();
-                Log::debug('Account Number:'.$request->account_number.' '. $e);
-
-                WalletTransactions::create([
-
-                    'txn_type_id'       => SEND_MONEY,
-                    'tax'               => '0.00',
-                    'revenue_fees'      => '0.00',
-                    'interchange_fees'  => '0.00',
-                    'zimswitch_fee'     => '0.00',
-                    'transaction_amount'=> '0.00',
-                    'total_debited'     => '0.00',
-                    'total_credited'    => '0.00',
-                    'batch_id'          => '',
-                    'switch_reference'  => '',
-                    'merchant_id'       => '',
-                    'transaction_status'=> 0,
-                    'pan'               => '',
-                    'description'       => 'Transaction was reversed for mobbile:' . $request->account_number,
-
-
-                ]);
-
-                return response([
-
-                    'code' => '400',
-                    'description' => 'Transaction was reversed',
-
-                ]);
+                return response(['code' => '100', 'description' => 'Transaction was reversed',]);
             }
 
-
-
     }
 
-    public function limit_checker($source_mobile,$wallet_cos_id){
-
-        //Check Daily Spent
-        $daily_spent =  WalletTransactions::where('account_debited',$source_mobile)
-            ->where('created_at', '>', Carbon::now()->subDays(1))
-            ->sum('transaction_amount');
-
-        //Check Monthly Spent
-        $monthly_spent =  WalletTransactions::where('account_debited',$source_mobile)
-            ->where('created_at', '>', Carbon::now()->subDays(30))
-            ->sum('transaction_amount');
-
+    public function limit_checker($source_mobile,$wallet_cos_id,$current_balance,$amount){
 
         $wallet_cos = WalletCOS::find($wallet_cos_id);
-        if($wallet_cos->maximum_daily <  $daily_spent){
-            return response([
-                'code' => '902',
-                'description' => 'Daily limit reached'
-            ]);
-        }
+        $monthly_spent =  WalletTransactions::where('account_debited',$source_mobile)
+            ->where('created_at', '>', Carbon::now()->subDays(30))
+            ->where('reversed', '!=', 1)
+            ->where('txn_type_id', SEND_MONEY)
+            ->sum('transaction_amount');
+
 
         if($wallet_cos->maximum_monthly <  $monthly_spent){
-            return response([
-                'code' => '902',
-                'description' => 'Monthly limit reached'
-            ]);
+            return array('code' => '902', 'description' => 'Wallet monthly limit reached.');
         }
 
+        $daily_spent =  WalletTransactions::where('account_debited',$source_mobile)
+           ->where('created_at', '>', Carbon::now()->subDays(1))
+           ->where('reversed', '!=', 1)
+           ->where('txn_type_id', SEND_MONEY)
+           ->sum('transaction_amount');
+
+        if($wallet_cos->maximum_daily <  $daily_spent){
+            return array('code' => '902', 'description' => 'Wallet  daily limit reached.');
+        }
+
+        $total = $current_balance - $amount;
+        if($total <= 0){
+            return array('code' => '100', 'description' => 'Overdraft is not permitted.'
+            );
+        }
+
+        return array(
+            'code' => '00',
+            'description' => 'success'
+        );
+
     }
 
 
-
-    protected function wallet_preauth(Array $data)
-    {
-        return Validator::make($data, [
-            'destination_mobile' => 'required',
-            'source_mobile' => 'required',
-
-        ]);
-
-
-    }
 
     protected function wallet_send_money(Array $data)
     {
@@ -367,11 +212,7 @@ class WalletSendMoneyController extends Controller
             'destination_mobile'    => 'required',
             'source_mobile'         => 'required',
             'amount'                => 'required|integer|min:0',
-
-
         ]);
-
-
     }
 
 
