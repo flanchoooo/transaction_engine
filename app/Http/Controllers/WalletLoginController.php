@@ -50,10 +50,12 @@ class WalletLoginController extends Controller
 
 
                 if($wallet->device_uuid != $request->device_uuid){
+                    OTPService::generateOtp($request->mobile,'LOGIN');
                     return response(['code' => '112', 'description' => 'Please provide OTP',]);
                 }
 
                 if($wallet->verified != 1){
+                    OTPService::generateOtp($request->mobile,'LOGIN');
                     return response(['code' => '113', 'description' => 'Please provide OTP',]);
                 }
                 $wallet->auth_attempts = 0;
@@ -102,7 +104,7 @@ class WalletLoginController extends Controller
         DB::beginTransaction();
         try {
             $wallet = Wallet::whereMobile($request->mobile)->first();
-            $saved_otp = OTP::whereMobile($request->mobile)->first();
+             $saved_otp = OTP::whereMobile($request->mobile)->first();
             if(!isset($wallet)){
                 return response(['code' => '100', 'description' => 'Wallet account is not registered.',]);
             }
