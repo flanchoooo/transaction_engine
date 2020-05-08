@@ -155,6 +155,10 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
     //Send Money
     $app->post('send_money',  'WalletSendMoneyController@sendMoney');
 
+    //Wallet ATM Withdrawal
+    $app->post('withdrawal/atm/otp',  'WalletATMWithdrawalController@generateOtp');
+    $app->post('/atm/withdrawal/',  'WalletATMWithdrawalController@atmWithdrawal');
+
 
 
 });

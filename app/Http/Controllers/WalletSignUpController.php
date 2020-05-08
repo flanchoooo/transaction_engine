@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\AESEncryption;
+use App\Services\OTPService;
 use App\Wallet;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -47,6 +48,7 @@ class WalletSignUpController extends Controller
             $wallet->save();
             DB::commit();
 
+            OTPService::generateOtp($request->mobile,'REGISTRATION');
             return response([
                 'code'          => '000',
                 'description'   => 'Wallet registration successful',
