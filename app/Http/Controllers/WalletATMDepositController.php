@@ -20,7 +20,6 @@ use App\Services\SmsNotificationService;
 use App\Services\TokenService;
 use App\Services\WalletFeesCalculatorService;
 use App\Transaction;
-use App\TransactionType;
 use App\Wallet;
 use App\WalletCOS;
 use App\WalletTransactions;
@@ -38,7 +37,7 @@ use Illuminate\Support\Facades\Validator;
 
 
 
-class WalletATMWithdrawalController extends Controller
+class WalletATMDepositController extends Controller
 {
 
     public function generateOtp(Request $request){
@@ -46,8 +45,8 @@ class WalletATMWithdrawalController extends Controller
         $validator = $this->generateOTPValidation($request->all());
         if ($validator->fails()) {
             return response()->json(['code' => '99', 'description' => $validator->errors()]);
-        }
 
+        }
 
         DB::beginTransaction();
         try {
@@ -105,82 +104,35 @@ class WalletATMWithdrawalController extends Controller
 
     }
 
-    public function atmWithdrawal(Request $request){
+    public function deposit(Request $request){
 
-        $validator = $this->atmWithdrawalValidator($request->all());
+        $validator = $this->atmDepositValidator($request->all());
         if ($validator->fails()) {
             return response()->json(['code' => '99', 'description' => $validator->errors()]);
 
         }
 
-        if(TransactionType::find(CASH_PICK_UP)->status != "ACTIVE"){
-            return response(['code' => '100', 'description' => 'Service under maintenance, please try again later.',]);
-        }
-
         DB::beginTransaction();
         try {
 
-            $source = Wallet::whereMobile($request->source_mobile)->lockForUpdate()->first();
+            $source = Wallet::whereMobile($request->destination_mobile)->lockForUpdate()->first();
             if(!isset($source)){
                 return response(['code'=> '100', 'description' => 'Invalid mobile account.']);
             }
 
-            //TODO -- SECURE OTP
-            $otp = ATMOTP::whereAuthorizationOtp($request->otp)
-                               ->whereMobile($request->source_mobile)
-                               ->first();
-
-            if(!isset($otp)){
-                return response(['code'=> '100', 'description' => 'Invalid OTP.']);
-            }
-
-            if($otp->expired == 1){
-                return response(['code'=> '102', 'description' => 'Invalid OTP.']);
-            }
-
-            $validity =  ATMOTP::whereAuthorizationOtp($request->otp)
-                                 ->whereMobile($request->source_mobile)
-                                 ->where('created_at', '>', Carbon::now()->subMinutes(30))
-                                 ->first();
-
-            if(!isset($validity)){
-                $otp->expired =1;
-                $otp->save();
-                DB::commit();
-                return response(['code'=> '100', 'description' => 'OTP expired.']);
-            }
-
-
-            $amount = $otp->amount;
-            $wallet_fees = WalletFeesCalculatorService::calculateFees($amount,CASH_PICK_UP);
-            if($wallet_fees["code"] != "00"){
-                return response(['code'=> '100', 'description' => 'Invalid transaction amount.']);
-            }
-
-            $total_deductions = $wallet_fees["fees_charged"] + $amount;
-            if ($total_deductions > $source->balance) {
-                return response(['code' => '116','description' => 'Insufficient funds',]);
-            }
-
-            $limit_checker = $this->limit_checker($request->source_mobile,$source->wallet_cos_id,$source->balance,$total_deductions);
-            if($limit_checker["code"] != 00){
-                return response(['code' => $limit_checker["code"],'description' => $limit_checker["description"],]);
-            }
-
-            $reference = 'AT'.Carbon::now()->timestamp;
+            $reference = 'ATDSP'.Carbon::now()->timestamp;
             $source_balance_before = $source->balance;
-            $source_balance_after  = $source->balance - $total_deductions;
+            $source_balance_after  = $source->balance + $request->amount;
 
-
-            $source->balance -= $total_deductions;
+            $source->balance +=  $request->amount;
             $source->save();
             $transaction                    = new WalletTransactions();
-            $transaction->txn_type_id       = CASH_PICK_UP;
-            $transaction->tax               =  $wallet_fees['tax'];
-            $transaction->fees              =  $wallet_fees['revenue_fees'];
-            $transaction->transaction_amount= $amount;
-            $transaction->debit_amount       = $amount;
-            $transaction->credit_amount      = '0.00';
+            $transaction->txn_type_id       = CASH_DEPOSIT;
+            $transaction->tax               =  0.00;
+            $transaction->fees              =  0.00;
+            $transaction->transaction_amount=  $request->amount;
+            $transaction->debit_amount       = 0.00;
+            $transaction->credit_amount      =  $request->amount;
             $transaction->transaction_status = "APPROVED";
             $transaction->transaction_reference= $reference;
             $transaction->account_debited   = $request->source_mobile;
@@ -191,14 +143,8 @@ class WalletATMWithdrawalController extends Controller
             $transaction->balance_before    = $source_balance_before;
             $transaction->balance_after     = $source_balance_after;
             $transaction->save();
-
-            $otp->expired =1;
-            $otp->save();
             DB::commit();
-
-            return response(['code' => '000', 'transaction_reference' => "$reference", 'description' => 'Atm cash withdrawal successful.']);
-
-
+            return response(['code' => '000', 'transaction_reference' => "$reference", 'description' => 'Atm cash deposit successful.']);
         }catch (\Exception $exception){
             DB::rollBack();
             if($exception->getCode() == "23000"){
@@ -253,12 +199,13 @@ class WalletATMWithdrawalController extends Controller
 
         ]);
     }
-    protected function atmWithdrawalValidator(Array $data)
+
+    protected function atmDepositValidator(Array $data)
     {
         return Validator::make($data, [
-            'source_mobile'            => 'required | string |min:0|max:20',
-            'otp'                      => 'required',
-            'transaction_identifier'   => 'required',
+            'destination_mobile'        => 'required | string |min:0|max:20',
+            'transaction_identifier'    => 'required',
+            'amount'                    => 'required|integer|min:0',
 
         ]);
     }

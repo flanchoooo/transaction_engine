@@ -153,9 +153,9 @@ class WalletLoginController extends Controller
                 return response(['code' => '000', 'description' => 'Invalid  credentials', 'data'=> $wallet]);
             }
 
-
             $wallet->auth_attempts =0;
             $wallet->verified =1;
+            $wallet->device_uuid =$request->device_uuid;
             $wallet->save();
 
             $saved_otp->attempts=0;
@@ -191,6 +191,7 @@ class WalletLoginController extends Controller
             'mobile'            => 'required | string |min:0|max:20',
             'otp'               => 'required',
             'pin'               => 'required',
+            'device_uuid'       => 'required',
         ]);
     }
 

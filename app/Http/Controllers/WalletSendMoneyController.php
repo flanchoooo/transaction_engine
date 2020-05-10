@@ -84,12 +84,15 @@ class WalletSendMoneyController extends Controller
             $transaction->tax               =  $wallet_fees['tax'];
             $transaction->fees              =  $wallet_fees['revenue_fees'];
             $transaction->transaction_amount= $request->amount;
+            $transaction->debit_amount      = $request->amount;
+            $transaction->credit_amount     = '0.00';
             $transaction->transaction_status = "APPROVED";
             $transaction->transaction_reference= $reference;
             $transaction->account_debited   = $request->source_mobile;
             $transaction->account_credited  = $request->destination_mobile;
             $transaction->description       = 'Transaction successfully processed.';
             $transaction->reversed          = 0;
+            $transaction->transaction_identifier= $request->transaction_identifier;
             $transaction->balance_before    = $source_balance_before;
             $transaction->balance_after     = $source_balance_after;
             $transaction->save();
@@ -97,8 +100,10 @@ class WalletSendMoneyController extends Controller
             $transaction                    = new WalletTransactions();
             $transaction->txn_type_id       = MONEY_RECEIVED;
             $transaction->tax               = '0.0000';
-            $transaction->fees              = '0.0000';;
+            $transaction->fees              = '0.0000';
             $transaction->transaction_amount= $request->amount;
+            $transaction->credit_amount     = $request->amount;
+            $transaction->debit_amount      = '0.00';
             $transaction->transaction_status = "APPROVED";
             $transaction->transaction_reference= $reference;
             $transaction->account_debited   = $request->source_mobile;
@@ -110,14 +115,12 @@ class WalletSendMoneyController extends Controller
             $transaction->save();
 
             DB::commit();
-            return response([
-                'code'                       => '000',
-                'transaction_reference'      => "$reference",
-                'description'                => 'Transfer successfully processed.'
-            ]);
-
+            return response(['code' => '000', 'transaction_reference' => "$reference", 'description' => 'Transfer successfully processed.']);
         } catch (\Exception $e) {
             DB::rollBack();
+             if($e->getCode() == "23000"){
+                 return response(['code' => '100', 'description' => 'Invalid transaction request.']);
+             }
             return response(['code' => '100', 'description' => 'Transaction was reversed',]);
         }
 
