@@ -166,6 +166,9 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
     $app->post('/link/emv/card',  'WalletSupportController@link');
     $app->post('/update/emv/card',  'WalletSupportController@delink');
 
+    //Pay Merchant
+    $app->post('/pay/merchant',  'WalletPayMerchantController@payMerchant');
+
 
 });
 

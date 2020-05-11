@@ -121,6 +121,8 @@ class WalletATMWithdrawalController extends Controller
         try {
 
             $source = Wallet::whereMobile($request->source_mobile)->lockForUpdate()->first();
+            $tax                 = Wallet::whereMobile(TAX)->lockForUpdate()->first();
+            $revenue             = Wallet::whereMobile(REVENUE)->lockForUpdate()->first();
             if(!isset($source)){
                 return response(['code'=> '100', 'description' => 'Invalid mobile account.']);
             }
@@ -170,6 +172,11 @@ class WalletATMWithdrawalController extends Controller
             $reference = 'AT'.Carbon::now()->timestamp;
             $source_balance_before = $source->balance;
             $source_balance_after  = $source->balance - $total_deductions;
+
+            $tax->balance +=$wallet_fees["tax"];
+            $tax->save();
+            $revenue->balance +=$wallet_fees["revenue_fees"];
+            $revenue->save();
 
 
             $source->balance -= $total_deductions;

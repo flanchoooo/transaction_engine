@@ -17,7 +17,7 @@ class WalletFeesCalculatorService
 {
     public static function calculateFees($amount,  $transaction_type){
 
-        $fee = Fee::where('transaction_id', SEND_MONEY)
+        $fee = Fee::where('transaction_id', $transaction_type)
             ->where('minimum_amount', '<=',$amount)
             ->where('maximum_amount', '>=', $amount)
             ->first();
