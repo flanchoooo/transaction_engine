@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 
 
 
+use App\Emv;
 use App\Logs;
 use App\LuhnCards;
 use App\Services\LoggingService;
@@ -17,8 +18,8 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-
-
+use mysql_xdevapi\Exception;
+use Symfony\Component\Finder\Finder;
 
 
 class WalletSupportController extends Controller
@@ -31,13 +32,11 @@ class WalletSupportController extends Controller
      */
     public function history(Request $request)
     {
-
         $validator = $this->history_validator($request->all());
         if ($validator->fails()) {
             return response()->json(['code' => '99', 'description' => $validator->errors()]);
 
         }
-
 
         try {
             $history_credit = WalletHistory::where('account_credited', $request->source_mobile)
@@ -111,10 +110,7 @@ class WalletSupportController extends Controller
 
     }
 
-
-
-
-   public function completed_number($prefix, $length)
+    public function completed_number($prefix, $length)
     {
         $ccnumber = $prefix;
         # generate digits
@@ -142,8 +138,57 @@ class WalletSupportController extends Controller
         return $ccnumber;
     }
 
+    public function link(Request $request){
+        $validator = $this->linkerValidation($request->all());
+        if ($validator->fails()) {
+            return response()->json(['code' => '99', 'description' => $validator->errors()]);
+        }
 
+        DB::beginTransaction();
+        try {
+            $source  = Wallet::whereMobile($request->source_mobile)->lockForUpdate()->first();
+            $emv_card = new Emv();
+            $emv_card->cvv = $request->cvv;
+            $emv_card->pan = $request->pan;
+            $emv_card->status = "ACTIVE";
+            $emv_card->expiry_date = $request->expiry_date;
+            $emv_card->linked = 1;
+            $emv_card->wallet_id = $source->id;
+            $emv_card->save();
+            DB::commit();
+            return response(['code' => '000', 'description' => 'Card successfully linked to wallet.']);
+        }catch (\Exception $exception){
+            DB::rollBack();
+            return response(['code' => '000', 'description' => 'Card already linked to wallet.']);
+        }
+    }
 
+    public function delink(Request $request){
+        $validator = $this->updatelinkerValidation($request->all());
+        if ($validator->fails()) {
+            return response()->json(['code' => '99', 'description' => $validator->errors()]);
+        }
+
+        DB::beginTransaction();
+        try {
+            $wallet = Wallet::whereMobile($request->source_mobile)->first();
+
+            $emv_card = Emv::whereWalletId($wallet->id)->first();
+            $emv_card->cvv = $request->cvv;
+            $emv_card->pan = $request->pan;
+            $emv_card->status = $request->status;
+            $emv_card->expiry_date = $request->expiry_date;
+            $emv_card->linked = $request->linked;
+            $emv_card->save();
+           DB::commit();
+
+            return response(['code' => '000', 'description' => 'Card successfully updated.']);
+        }catch (\Exception $exception){
+            return $exception;
+            DB::rollBack();
+            return response(['code' => '100', 'description' => 'Card profile could not be updated.']);
+        }
+    }
 
 
     protected function history_validator(Array $data)
@@ -163,6 +208,29 @@ class WalletSupportController extends Controller
             'issue_month'   => 'required',
         ]);
     }
+
+    protected function linkerValidation(Array $data)
+    {
+        return Validator::make($data, [
+            'source_mobile' => 'required',
+            'cvv'           => 'required',
+            'pan'           => 'required',
+            'expiry_date'   => 'required |string |min:0|max:4',
+        ]);
+    }
+
+    protected function updatelinkerValidation(Array $data)
+    {
+        return Validator::make($data, [
+            'source_mobile' => 'required',
+            'cvv'           => 'required',
+            'pan'           => 'required',
+            'linked'         => 'required',
+            'status'         => 'required',
+            'expiry_date'   => 'required |string |min:0|max:4',
+        ]);
+    }
+
 
 
 

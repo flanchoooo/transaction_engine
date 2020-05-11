@@ -38,6 +38,9 @@ class WalletSendMoneyController extends Controller
 
             $source              = Wallet::whereMobile($request->source_mobile)->lockForUpdate()->first();
             $destination         = Wallet::whereMobile($request->destination_mobile)->lockForUpdate()->first();
+            $tax                 = Wallet::whereMobile(TAX)->lockForUpdate()->first();
+            $revenue             = Wallet::whereMobile(REVENUE)->lockForUpdate()->first();
+
             $pin = AESEncryption::decrypt($request->pin);
             if($pin["pin"] == false){
                 $source->auth_attempts+=1;
@@ -78,6 +81,11 @@ class WalletSendMoneyController extends Controller
             $source->save();
             $destination->balance += $request->amount;
             $destination->save();
+
+            $tax->balance +=$wallet_fees["tax"];
+            $tax->save();
+            $revenue->balance +=$wallet_fees["revenue_fees"];
+            $revenue->save();
 
             $transaction                    = new WalletTransactions();
             $transaction->txn_type_id       = SEND_MONEY;

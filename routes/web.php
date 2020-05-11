@@ -163,6 +163,8 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
     //Support
     $app->post('history',  'WalletSupportController@history');
     $app->post('/generate/virtual/card',  'WalletSupportController@virtualCard');
+    $app->post('/link/emv/card',  'WalletSupportController@link');
+    $app->post('/update/emv/card',  'WalletSupportController@delink');
 
 
 });
