@@ -150,7 +150,7 @@ class WalletLoginController extends Controller
                 $wallet->auth_attempts +=1;
                 $wallet->save();
                 DB::commit();
-                return response(['code' => '000', 'description' => 'Invalid  credentials', 'data'=> $wallet]);
+                return response(['code' => '100', 'description' => 'Invalid login credentials']);
             }
 
             $wallet->auth_attempts =0;
