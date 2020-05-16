@@ -166,8 +166,6 @@ class WalletSignUpController extends Controller
 
 
 
-
-
     protected function wallet_kyc(Array $data)
     {
         return Validator::make($data, [
