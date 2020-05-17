@@ -18,7 +18,7 @@ class WalletSignUpController extends Controller
     public function wallet_sign_up(Request $request){
         $validator = $this->wallet_kyc($request->all());
         if ($validator->fails()) {
-            return response()->json(['code' => '99', 'description' => $validator->errors()]);
+            return response()->json(['code' => '99', 'description' => $validator->errors()],400);
         }
         DB::beginTransaction();
         try {
@@ -28,7 +28,7 @@ class WalletSignUpController extends Controller
                 return response([
                     'code' => '807',
                     'description' => 'Invalid authorization credentials',
-                ]);
+                ],201);
             }
             $wallet = new  Wallet();
             $wallet->mobile         = $request->mobile;
@@ -62,13 +62,13 @@ class WalletSignUpController extends Controller
                 return response([
                     'code'          => '100',
                     'description'   => 'Mobile wallet details already registered.',
-                ]);
+                ],500);
             }
 
             return response([
                 'code' => '100',
                 'description' => 'Registration failed,please contact support for assistance',
-            ]);
+            ],500);
         }
 
     }
@@ -87,7 +87,7 @@ class WalletSignUpController extends Controller
                 return response([
                     'code' => '100',
                     'description' => 'Invalid credentials',
-                ]);
+                ],201);
             }
 
             if($user->auth_attempts > 2){
@@ -97,7 +97,7 @@ class WalletSignUpController extends Controller
                 return response([
                     'code' => '100',
                     'description' => 'Account is blocked',
-                ]);
+                ],201);
             }
 
 
@@ -107,7 +107,7 @@ class WalletSignUpController extends Controller
                 return response([
                     'code' => '807',
                     'description' => 'Invalid new pin credentials',
-                ]);
+                ],201);
             }
 
 
@@ -119,7 +119,7 @@ class WalletSignUpController extends Controller
                 return response([
                     'code' => '807',
                     'description' => 'Invalid old pin credentials',
-                ]);
+                ],201);
             }
 
 
@@ -130,14 +130,16 @@ class WalletSignUpController extends Controller
                 return response([
                     'code' => '100',
                     'description' => 'Incorrect pin',
-                ]);
+                ],201);
             }
 
 
             if (Hash::check($new_pin["pin"], $user->pin)) {
-                return array('code'        => '01',
+
+                return response([
+                    'code' => '100',
                     'description' => 'Your new PIN cannot match your previous PIN',
-                );
+                ],201);
             }
 
 
@@ -153,13 +155,11 @@ class WalletSignUpController extends Controller
 
 
         }catch (\Exception $exception){
-
-            return $exception;
             DB::rollback();
             return response([
                 'code' => '100',
                 'description' => 'Pin change failed.',
-            ]);
+            ],500);
         }
 
     }

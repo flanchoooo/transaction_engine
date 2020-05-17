@@ -24,14 +24,14 @@ class WalletSendMoneyController extends Controller
     public function sendMoney(Request $request){
         $validator = $this->wallet_send_money($request->all());
         if ($validator->fails()) {
-            return response()->json(['code' => '99', 'description' => $validator->errors()]);
+            return response()->json(['code' => '99', 'description' => $validator->errors()],400);
         }
 
         if($request->source_mobile == $request->destination_mobile) {
-            return response(['code' => '100', 'description' => 'Transaction request is not permitted.',]);
+            return response(['code' => '100', 'description' => 'Transaction request is not permitted.',],400);
         }
         if(TransactionType::find(SEND_MONEY)->status != "ACTIVE"){
-            return response(['code' => '100', 'description' => 'Service under maintenance, please try again later.',]);
+            return response(['code' => '100', 'description' => 'Service under maintenance, please try again later.',],201);
         }
         DB::beginTransaction();
         try {
@@ -46,29 +46,29 @@ class WalletSendMoneyController extends Controller
                 $source->auth_attempts+=1;
                 $source->save();
                 DB::commit();
-                return response(['code' => '807', 'description' => 'Invalid credentials']);
+                return response(['code' => '807', 'description' => 'Invalid credentials'],201);
             }
 
             if (!Hash::check($pin["pin"], $source->pin)) {
                 $source->auth_attempts += 1;
                 $source->save();
                 DB::commit();
-                return response(['code' => '100', 'description' => 'Invalid credentials']);
+                return response(['code' => '100', 'description' => 'Invalid credentials'],201);
             }
 
             $wallet_fees = WalletFeesCalculatorService::calculateFees($request->amount,SEND_MONEY);
             if($wallet_fees["code"] != "00"){
-                return response(['code'=> '100', 'description' => 'Invalid transaction amount.']);
+                return response(['code'=> '100', 'description' => 'Invalid transaction amount.'],201);
             }
 
             $total_deductions = $wallet_fees["fees_charged"] + $request->amount;
             if ($total_deductions > $source->balance) {
-                return response(['code' => '116','description' => 'Insufficient funds',]);
+                return response(['code' => '116','description' => 'Insufficient funds',],400);
             }
 
             $limit_checker = $this->limit_checker($request->source_mobile,$source->wallet_cos_id,$source->balance,$total_deductions);
             if($limit_checker["code"] != 00){
-                return response(['code' => $limit_checker["code"],'description' => $limit_checker["description"],]);
+                return response(['code' => $limit_checker["code"],'description' => $limit_checker["description"],],400);
             }
 
             $reference = 'SM'.Carbon::now()->timestamp;
@@ -127,9 +127,9 @@ class WalletSendMoneyController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
              if($e->getCode() == "23000"){
-                 return response(['code' => '100', 'description' => 'Invalid transaction request.']);
+                 return response(['code' => '100', 'description' => 'Invalid transaction request.'],500);
              }
-            return response(['code' => '100', 'description' => 'Transaction was reversed',]);
+            return response(['code' => '100', 'description' => 'Transaction was reversed',],500);
         }
 
     }

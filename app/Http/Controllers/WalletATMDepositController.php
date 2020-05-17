@@ -56,14 +56,14 @@ class WalletATMDepositController extends Controller
                 $source->auth_attempts += 1;
                 $source->save();
                 DB::commit();
-                return response(['code' => '807', 'description' => 'Invalid credentials']);
+                return response(['code' => '807', 'description' => 'Invalid credentials'],201);
             }
 
             if (!Hash::check($pin["pin"], $source->pin)) {
                 $source->auth_attempts += 1;
                 $source->save();
                 DB::commit();
-                return response(['code' => '100', 'description' => 'Invalid credentials']);
+                return response(['code' => '100', 'description' => 'Invalid credentials'],201);
             }
 
             $wallet_fees = WalletFeesCalculatorService::calculateFees($request->amount,CASH_PICK_UP);
@@ -78,7 +78,7 @@ class WalletATMDepositController extends Controller
 
             $limit_checker = $this->limit_checker($request->source_mobile,$source->wallet_cos_id,$source->balance,$total_deductions);
             if($limit_checker["code"] != 00){
-                return response(['code' => $limit_checker["code"],'description' => $limit_checker["description"],]);
+                return response(['code' => $limit_checker["code"],'description' => $limit_checker["description"],],201);
             }
 
             $atm_code = OTPService::generateATMWithdrawlOtp();
@@ -108,7 +108,7 @@ class WalletATMDepositController extends Controller
 
         $validator = $this->atmDepositValidator($request->all());
         if ($validator->fails()) {
-            return response()->json(['code' => '99', 'description' => $validator->errors()]);
+            return response()->json(['code' => '99', 'description' => $validator->errors()],201);
 
         }
 
@@ -117,7 +117,7 @@ class WalletATMDepositController extends Controller
 
             $source = Wallet::whereMobile($request->destination_mobile)->lockForUpdate()->first();
             if(!isset($source)){
-                return response(['code'=> '100', 'description' => 'Invalid mobile account.']);
+                return response(['code'=> '100', 'description' => 'Invalid mobile account.'],201);
             }
 
             $reference = 'ATDSP'.Carbon::now()->timestamp;
@@ -148,9 +148,9 @@ class WalletATMDepositController extends Controller
         }catch (\Exception $exception){
             DB::rollBack();
             if($exception->getCode() == "23000"){
-                return response(['code' => '100', 'description' => 'Invalid transaction request.']);
+                return response(['code' => '100', 'description' => 'Invalid transaction request.'],500);
             }
-            return response(['code' => '100', 'description' => 'Transaction was reversed',]); }
+            return response(['code' => '100', 'description' => 'Transaction was reversed',],500); }
 
     }
 

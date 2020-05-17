@@ -47,13 +47,13 @@ class LendingKycController extends Controller
                 return response([
                     'code'          => '100',
                     'description'   => 'Email account is already taken.',
-                ]);
+                ],500);
             }
 
             return response([
                 'code' => '100',
                 'description' => 'Please contact support for assistance.',
-            ]);
+            ],500);
         }
 
     }
@@ -147,7 +147,7 @@ class LendingKycController extends Controller
         try {
           $lendingProfile = LendingKYC::whereEmail($request->email)->first();
             if(!isset($lendingProfile)){
-                return response(['code' => '100', 'description' => 'Invalid profile']);
+                return response(['code' => '100', 'description' => 'Invalid profile'],201);
             }
             $lendingProfile->first_name = $request->first_name;
             $lendingProfile->last_name = $request->last_name;
@@ -168,7 +168,7 @@ class LendingKycController extends Controller
 
         }catch (\Exception $exception){
             DB::rollback();
-            return response(['code' => '100', 'description' => 'Login Failed.',]);
+            return response(['code' => '100', 'description' => 'Login Failed.',],500);
         }
 
     }

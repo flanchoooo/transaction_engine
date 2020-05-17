@@ -45,7 +45,7 @@ class WalletATMWithdrawalController extends Controller
 
         $validator = $this->generateOTPValidation($request->all());
         if ($validator->fails()) {
-            return response()->json(['code' => '99', 'description' => $validator->errors()]);
+            return response()->json(['code' => '99', 'description' => $validator->errors()],400);
         }
 
 
@@ -57,29 +57,29 @@ class WalletATMWithdrawalController extends Controller
                 $source->auth_attempts += 1;
                 $source->save();
                 DB::commit();
-                return response(['code' => '807', 'description' => 'Invalid credentials']);
+                return response(['code' => '807', 'description' => 'Invalid credentials'],400);
             }
 
             if (!Hash::check($pin["pin"], $source->pin)) {
                 $source->auth_attempts += 1;
                 $source->save();
                 DB::commit();
-                return response(['code' => '100', 'description' => 'Invalid credentials']);
+                return response(['code' => '100', 'description' => 'Invalid credentials'],400);
             }
 
             $wallet_fees = WalletFeesCalculatorService::calculateFees($request->amount,CASH_PICK_UP);
             if($wallet_fees["code"] != "00"){
-                return response(['code'=> '100', 'description' => 'Invalid transaction amount.']);
+                return response(['code'=> '100', 'description' => 'Invalid transaction amount.'],400);
             }
 
             $total_deductions = $wallet_fees["fees_charged"] + $request->amount;
             if ($total_deductions > $source->balance) {
-                return response(['code' => '116','description' => 'Insufficient funds',]);
+                return response(['code' => '116','description' => 'Insufficient funds',],400);
             }
 
             $limit_checker = $this->limit_checker($request->source_mobile,$source->wallet_cos_id,$source->balance,$total_deductions);
             if($limit_checker["code"] != 00){
-                return response(['code' => $limit_checker["code"],'description' => $limit_checker["description"],]);
+                return response(['code' => $limit_checker["code"],'description' => $limit_checker["description"],],400);
             }
 
             $atm_code = OTPService::generateATMWithdrawlOtp();
@@ -100,7 +100,7 @@ class WalletATMWithdrawalController extends Controller
 
         }catch (\Exception $exception){
             DB::rollBack();
-            return response(['code' => '100', 'description' => 'Your request could be processed please try again later.',]);
+            return response(['code' => '100', 'description' => 'Your request could be processed please try again later.',],500);
         }
 
     }
@@ -109,12 +109,12 @@ class WalletATMWithdrawalController extends Controller
 
         $validator = $this->atmWithdrawalValidator($request->all());
         if ($validator->fails()) {
-            return response()->json(['code' => '99', 'description' => $validator->errors()]);
+            return response()->json(['code' => '99', 'description' => $validator->errors()],400);
 
         }
 
         if(TransactionType::find(CASH_PICK_UP)->status != "ACTIVE"){
-            return response(['code' => '100', 'description' => 'Service under maintenance, please try again later.',]);
+            return response(['code' => '100', 'description' => 'Service under maintenance, please try again later.',],500);
         }
 
         DB::beginTransaction();
@@ -124,7 +124,7 @@ class WalletATMWithdrawalController extends Controller
             $tax                 = Wallet::whereMobile(TAX)->lockForUpdate()->first();
             $revenue             = Wallet::whereMobile(REVENUE)->lockForUpdate()->first();
             if(!isset($source)){
-                return response(['code'=> '100', 'description' => 'Invalid mobile account.']);
+                return response(['code'=> '100', 'description' => 'Invalid mobile account.'],400);
             }
 
             //TODO -- SECURE OTP
@@ -133,11 +133,11 @@ class WalletATMWithdrawalController extends Controller
                                ->first();
 
             if(!isset($otp)){
-                return response(['code'=> '100', 'description' => 'Invalid OTP.']);
+                return response(['code'=> '100', 'description' => 'Invalid OTP.'],400);
             }
 
             if($otp->expired == 1){
-                return response(['code'=> '102', 'description' => 'Invalid OTP.']);
+                return response(['code'=> '102', 'description' => 'Invalid OTP.'],400);
             }
 
             $validity =  ATMOTP::whereAuthorizationOtp($request->otp)
@@ -149,24 +149,24 @@ class WalletATMWithdrawalController extends Controller
                 $otp->expired =1;
                 $otp->save();
                 DB::commit();
-                return response(['code'=> '100', 'description' => 'OTP expired.']);
+                return response(['code'=> '100', 'description' => 'OTP expired.'],400);
             }
 
 
             $amount = $otp->amount;
             $wallet_fees = WalletFeesCalculatorService::calculateFees($amount,CASH_PICK_UP);
             if($wallet_fees["code"] != "00"){
-                return response(['code'=> '100', 'description' => 'Invalid transaction amount.']);
+                return response(['code'=> '100', 'description' => 'Invalid transaction amount.'],400);
             }
 
             $total_deductions = $wallet_fees["fees_charged"] + $amount;
             if ($total_deductions > $source->balance) {
-                return response(['code' => '116','description' => 'Insufficient funds',]);
+                return response(['code' => '116','description' => 'Insufficient funds',],400);
             }
 
             $limit_checker = $this->limit_checker($request->source_mobile,$source->wallet_cos_id,$source->balance,$total_deductions);
             if($limit_checker["code"] != 00){
-                return response(['code' => $limit_checker["code"],'description' => $limit_checker["description"],]);
+                return response(['code' => $limit_checker["code"],'description' => $limit_checker["description"],],400);
             }
 
             $reference = 'AT'.Carbon::now()->timestamp;
@@ -209,9 +209,9 @@ class WalletATMWithdrawalController extends Controller
         }catch (\Exception $exception){
             DB::rollBack();
             if($exception->getCode() == "23000"){
-                return response(['code' => '100', 'description' => 'Invalid transaction request.']);
+                return response(['code' => '100', 'description' => 'Invalid transaction request.'],500);
             }
-            return response(['code' => '100', 'description' => 'Transaction was reversed',]); }
+            return response(['code' => '100', 'description' => 'Transaction was reversed',],500); }
 
     }
 

@@ -34,7 +34,7 @@ class WalletSupportController extends Controller
     {
         $validator = $this->history_validator($request->all());
         if ($validator->fails()) {
-            return response()->json(['code' => '99', 'description' => $validator->errors()]);
+            return response()->json(['code' => '99', 'description' => $validator->errors()],400);
 
         }
 
@@ -68,7 +68,7 @@ class WalletSupportController extends Controller
             }
             return response(['code' => '00', 'description' => 'success', 'time' => Carbon::now()->format('ymdhis'), 'data' => array_reverse($result),]);
         } catch (\Exception $exception) {
-            return response(['code' => '100', 'description' => 'Failed to fetch transaction records',]);
+            return response(['code' => '100', 'description' => 'Failed to fetch transaction records',],500);
         }
     }
 
@@ -76,7 +76,7 @@ class WalletSupportController extends Controller
     {
         $validator = $this->virtualCardValidator($request->all());
         if ($validator->fails()) {
-            return response()->json(['code' => '99', 'description' => $validator->errors()]);
+            return response()->json(['code' => '99', 'description' => $validator->errors()],400);
         }
 
 
@@ -103,9 +103,9 @@ class WalletSupportController extends Controller
         } catch (\Exception $exception) {
             DB::rollBack();
             if ($exception->getCode() == "23000") {
-                return response(['code' => '100', 'description' => 'Virtual card already exists for this account..']);
+                return response(['code' => '100', 'description' => 'Virtual card already exists for this account..'],500);
             }
-            return response(['code' => '100', 'description' => 'Virtual card could be created.',]);
+            return response(['code' => '100', 'description' => 'Virtual card could be created.',],500);
         }
 
     }
