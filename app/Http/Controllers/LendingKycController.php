@@ -35,9 +35,7 @@ class LendingKycController extends Controller
             $register->email = $request->email;
             $register->save();
             DB::commit();
-            return response([
-                'code'          => '000',
-                'description'   => 'Step 1 of loan application was successfully completed.',
+            return response(['code'  => '000', 'description'   => 'Step 1 of loan application was successfully completed.',
             ]);
 
         }catch (\Exception $exception){
@@ -61,7 +59,7 @@ class LendingKycController extends Controller
     public function send(Request $request){
         $validator = $this->sendMailValidator($request->all());
         if ($validator->fails()) {
-            return response()->json(['code' => '99', 'description' => $validator->errors()]);
+            return response()->json(['code' => '99', 'description' => $validator->errors()],400);
         }
 
         try {
@@ -88,7 +86,7 @@ class LendingKycController extends Controller
             return response([
                 'code' => '100',
                 'description' => 'Please contact system administrator for assistance. ',
-            ]);
+            ],500);
         }
 
     }
@@ -96,25 +94,25 @@ class LendingKycController extends Controller
     public function login(Request $request){
         $validator = $this->loginValidator($request->all());
         if ($validator->fails()) {
-            return response()->json(['code' => '99', 'description' => $validator->errors()]);
+            return response()->json(['code' => '99', 'description' => $validator->errors()],400);
         }
         DB::beginTransaction();
         try {
           $lendingProfile = LendingKYC::whereMobile($request->mobile)->first();
             if(!isset($lendingProfile)){
-                return response(['code' => '100', 'description' => 'Invalid login credentials']);
+                return response(['code' => '100', 'description' => 'Invalid login credentials'],400);
             }
 
 
             if($lendingProfile->status != "ACTIVE"){
-                return response(['code' => '100', 'description' => 'Account is blocked',]);
+                return response(['code' => '100', 'description' => 'Account is blocked',],201);
             }
 
             if($lendingProfile->auth_attempts > 2){
                 $lendingProfile->status = "BLOCKED";
                 $lendingProfile->save();
                 DB::commit();
-                return response(['code' => '100', 'description' => 'Account is blocked']);
+                return response(['code' => '100', 'description' => 'Account is blocked'],201);
             }
 
 
@@ -129,11 +127,11 @@ class LendingKycController extends Controller
             $lendingProfile->auth_attempts+=1;
             $lendingProfile->save();
             DB::commit();
-            return response(['code' => '100','description' => 'Invalid login credentials',]);
+            return response(['code' => '100','description' => 'Invalid login credentials',],400);
 
         }catch (\Exception $exception){
             DB::rollback();
-            return response(['code' => '100', 'description' => 'Login Failed.',]);
+            return response(['code' => '100', 'description' => 'Login Failed.',],500);
         }
 
     }
