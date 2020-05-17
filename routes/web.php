@@ -177,6 +177,9 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
 
     //Loan Application
     $app->post('/lending/apply',  'LoanApplicationController@apply');
+    $app->post('/lending/history',  'LoanApplicationController@history');
+    $app->post('/lending/cancel/loan',  'LoanApplicationController@cancel');
+    $app->post('/lending/upload/documents',  'LoanApplicationController@upload');
 
 });
 
