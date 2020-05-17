@@ -44,6 +44,7 @@ class LoanApplicationController extends Controller
             }
 
              $loanClass = LoanClassofService::find($request->loan_cos);
+            $repayment = $this->calcPmt($request->amount,$loanClass->interest_rate,$request->loan_tenure);
             if($lendingProfile->initial_amount > 0){
                 $application = new Loans();
                 $application->applicant_id = $lendingProfile->id;
@@ -58,8 +59,11 @@ class LoanApplicationController extends Controller
                 $application->save();
                 DB::commit();
                 return response([
-                    'code'=> '000', 'description' => 'Loan application successfully submitted, please proceed to upload supporting documents.',
-                ]);
+                    'code'                  => '000',
+                    'description'           => 'Loan application successfully submitted, please proceed to upload supporting documents.',
+                    'monthly_installments'  => $repayment,
+                    'draw_down_fee'         => $loanClass->draw_down_fee,
+                    'establishment_fee'     => $loanClass->establishment_fee]);
             }
 
             $application = new Loans();
@@ -74,7 +78,7 @@ class LoanApplicationController extends Controller
             $lendingProfile->save();
             $application->save();
             DB::commit();
-            $repayment = $this->calcPmt($request->amount,$loanClass->interest_rate,$request->loan_tenure);
+
             return response([
                 'code'                  => '000',
                 'description'           => 'Loan application successfully submitted, please proceed to upload supporting documents.',
