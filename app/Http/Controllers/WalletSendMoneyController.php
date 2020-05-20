@@ -14,6 +14,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 
@@ -30,9 +31,18 @@ class WalletSendMoneyController extends Controller
         if($request->source_mobile == $request->destination_mobile) {
             return response(['code' => '100', 'description' => 'Transaction request is not permitted.',],400);
         }
-        if(TransactionType::find(SEND_MONEY)->status != "ACTIVE"){
-            return response(['code' => '100', 'description' => 'Service under maintenance, please try again later.',],201);
+        $transaction = TransactionType::find(SEND_MONEY)->first();
+        if(!isset($transaction)){
+            return response(['code' => '100', 'description' => 'Unknown transaction type.',],400);
         }
+
+        if($transaction->status !='ACTIVE'){
+            if($request->source_mobile == $request->destination_mobile) {
+                return response(['code' => '100', 'description' => 'Service is currently unavailable, please try again later.',],401);
+            }
+        }
+
+
         DB::beginTransaction();
         try {
 
@@ -40,6 +50,24 @@ class WalletSendMoneyController extends Controller
             $destination         = Wallet::whereMobile($request->destination_mobile)->lockForUpdate()->first();
             $tax                 = Wallet::whereMobile(TAX)->lockForUpdate()->first();
             $revenue             = Wallet::whereMobile(REVENUE)->lockForUpdate()->first();
+
+
+            if(!isset($source)){
+                return response(['code' => '100', 'description' => 'Source mobile is not registered.',],400);
+            }
+
+            if(!isset($destination)){
+                return response(['code' => '100', 'description' => 'Destination mobile is not registered.',],400);
+            }
+
+            if(!isset($tax)){
+                return response(['code' => '100', 'description' => 'Tax account configuration is missing.',],400);
+            }
+
+            if(!isset($revenue)){
+                return response(['code' => '100', 'description' => 'Revenue account configuration is missing.',],400);
+            }
+
 
             $pin = AESEncryption::decrypt($request->pin);
             if($pin["pin"] == false){
@@ -126,10 +154,16 @@ class WalletSendMoneyController extends Controller
             return response(['code' => '000', 'transaction_reference' => "$reference", 'description' => 'Transfer successfully processed.']);
         } catch (\Exception $e) {
             DB::rollBack();
-             if($e->getCode() == "23000"){
-                 return response(['code' => '100', 'description' => 'Invalid transaction request.'],500);
+            $errorLog = array(
+                'requests'  => $request->all(),
+                'error_log' => $e->getMessage()
+            );
+
+            Log::debug('Send Money Exceptions:',$errorLog);
+            if($e->getCode() == "23000"){
+                 return response(['code' => '100', 'description' => 'Invalid transaction request.','error_message' =>$e->getMessage()],500);
              }
-            return response(['code' => '100', 'description' => 'Transaction was reversed',],500);
+            return response(['code' => '100', 'description' => 'Transaction was reversed','error_message' =>$e->getMessage(),],500);
         }
 
     }
