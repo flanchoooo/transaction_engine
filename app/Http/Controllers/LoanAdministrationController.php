@@ -24,7 +24,9 @@ class LoanAdministrationController extends Controller
 
     public function pendingApprovals(){
         try {
-            return response([LoanHistory::whereStatus('PENDING APPROVAL')->get()]);
+            return response(
+                LoanHistory::whereIn('status',['PENDING APPROVAL','PENDING AUTHORIZATION'])->get()
+            );
         }catch (\Exception $exception){
             return response(['code' => '100', 'description' => 'Please contact support for assistance.',],500);
         }
@@ -49,13 +51,23 @@ class LoanAdministrationController extends Controller
                 $updateLoan->description = $narration;
                 $updateLoan->save();
                 DB::commit();
-                return response(['code' => '01', 'description' => 'Loan amount should not exceed '.$percentage.' % '.' of your  net salary',],200);
+                return response(['code' => '00', 'description' => 'Loan amount should not exceed '.$percentage.' % '.' of your  net salary',],200);
             }
+
+            if($request->status == 'DECLINED'){
+                $updateLoan->status = 'DECLINED';
+                $updateLoan->description = 'Loan application declined.';
+                $updateLoan->save();
+                DB::commit();
+                return response(['code' => '00', 'description' => 'Loan application declined.',],200);
+            }
+
 
             if($request->status == 'PENDING AUTHORIZATION'){
                 $updateLoan->status = 'PENDING AUTHORIZATION';
                 $updateLoan->description = 'Loan documents and details have been approved.';
                 $updateLoan->save();
+                DB::commit();
                 return response(['code' => '00', 'description' => 'Loan KYC documents successfully approved.',],200);
             }
 
@@ -75,7 +87,6 @@ class LoanAdministrationController extends Controller
                   $loanProfile->save();
                   DB::commit();
                 }
-
                 $updateLoan->status = 'LOAN APPROVED';
                 $updateLoan->description = 'Loan successfully approved.';
                 $updateLoan->save();

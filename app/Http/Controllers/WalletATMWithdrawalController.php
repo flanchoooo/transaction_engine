@@ -48,7 +48,6 @@ class WalletATMWithdrawalController extends Controller
             return response()->json(['code' => '99', 'description' => $validator->errors()],400);
         }
 
-
         DB::beginTransaction();
         try {
             $source = Wallet::whereMobile($request->source_mobile)->lockForUpdate()->first();
@@ -100,7 +99,7 @@ class WalletATMWithdrawalController extends Controller
 
         }catch (\Exception $exception){
             DB::rollBack();
-            return response(['code' => '100', 'description' => 'Your request could be processed please try again later.',],500);
+            return response(['code' => '100', 'description' => 'Your request could be processed please try again later.','error_message' => $exception->getMessage(),],500);
         }
 
     }
@@ -211,7 +210,8 @@ class WalletATMWithdrawalController extends Controller
             if($exception->getCode() == "23000"){
                 return response(['code' => '100', 'description' => 'Invalid transaction request.'],500);
             }
-            return response(['code' => '100', 'description' => 'Transaction was reversed',],500); }
+            return response(['code' => '100', 'description' => 'Your request could be processed please try again later.','error_message' => $exception->getMessage(),],500);
+        }
 
     }
 
