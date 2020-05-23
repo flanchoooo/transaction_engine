@@ -84,6 +84,7 @@ class LoanAdministrationController extends Controller
                   $loanProfile->status = 'PENDING PAYMENT';
                   $loanProfile->loan_id  =$request->id;
                   $loanProfile->time_period  = $x;
+                  $loanProfile->loan_balance  -=$updateLoan->amount - $loanFees["installment_fee_inclusive"];
                   $loanProfile->save();
                   DB::commit();
                 }
@@ -97,7 +98,6 @@ class LoanAdministrationController extends Controller
             return response(['code' => '100', 'description' => 'Please contact support for assistance.',],500);
         }
     }
-
 
     function simpleInterest($principal,$interest,$time,$establishmentFee,$drawDownFee){
         $period =  $time /12;
@@ -117,12 +117,96 @@ class LoanAdministrationController extends Controller
 
     }
 
+    public function profile(Request $request){
+        $validator = $this->profileValidator($request->all());
+        if ($validator->fails()) {
+            return response()->json(['code' => '99', 'description' => $validator->errors()],400);
+        }
+
+        try {
+
+            $loanId = LoanHistory::whereId($request->applicant_details)->first();
+            $applicant = LendingKYC::whereId($loanId->applicant_id)->first();
+            $repayment = LoanEngine::whereLoanId($loanId->id)->get();
+            $sum = LoanEngine::whereLoanId($loanId->id)
+                                ->whereStatus('PAID')->sum('installment_fee_inclusive');
+            if(!isset($applicant)){
+                return response(['code' => '100', 'description' => 'Applicant not found'],400);
+            }
+            $balance = $loanId->amount - $sum;
+            return response([
+                'loan_profile' => $loanId,
+                'loan_applicant' =>$applicant,
+                'loan_repayment' => $repayment,
+                'loan_balance' =>  $balance
+            ]);
+        }catch (\Exception $exception){
+            return response(['code' => '100', 'description' => 'Please contact support for assistance.', 'error_message' => $exception->getMessage()],500);
+        }
+    }
+
+    public function loanBook(Request $request){
+        $validator = $this->profileValidator($request->all());
+        if ($validator->fails()) {
+            return response()->json(['code' => '99', 'description' => $validator->errors()],400);
+        }
+
+        try {
+            $sum = LoanEngine::whereStatus('PENDING PAYMENT')->sum('installment_fee_inclusive');
+            $int = LoanEngine::whereStatus('PAID')->sum('interest_earnings');
+            return response([
+                'loan_book_position' => $sum,
+                'interest_earnings' =>$int,
+            ]);
+        }catch (\Exception $exception){
+            return response(['code' => '100', 'description' => 'Please contact support for assistance.', 'error_message' => $exception->getMessage()],500);
+        }
+    }
+
+    public function payment(Request $request){
+        $validator = $this->paymentValidator($request->all());
+        if ($validator->fails()) {
+            return response()->json(['code' => '99', 'description' => $validator->errors()],400);
+        }
+
+        DB::beginTransaction();
+        try {
+            $repayment = LoanEngine::whereId($request->loan_repayment_id)->where('status' ,'=', 'PENDING PAYMENT')->lockForUpdate()->first();
+            $repayment->status = 'PAID';
+            $repayment->description = 'Loan payment successfully processed.';
+            $repayment->save();
+            DB::commit();
+            return response(['code' => '00', 'description' =>'Loan successfully paid']);
+        }catch (\Exception $exception){
+            DB::rollBack();
+            return response(['code' => '100', 'description' => 'Please contact support for assistance.', 'error_message' => $exception->getMessage()],500);
+        }
+    }
+
 
     protected function updateLoansApplicationValidator(Array $data)
     {
         return Validator::make($data, [
             'id'            => 'required',
             'status'        => 'required',
+        ]);
+
+
+    }
+
+    protected function profileValidator(Array $data)
+    {
+        return Validator::make($data, [
+            'applicant_details'            => 'required',
+        ]);
+
+
+    }
+
+    protected function paymentValidator(Array $data)
+    {
+        return Validator::make($data, [
+            'loan_repayment_id'            => 'required',
         ]);
 
 
