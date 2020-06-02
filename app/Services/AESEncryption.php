@@ -13,28 +13,31 @@ class AESEncryption
     public  static function encrypt($plaintext, $password) {
         $method = "AES-256-CBC";
         $key = hash('sha256', $password, false);
-        $iv = openssl_random_pseudo_bytes(16);
+        $iv = 'PxN0p4cXdjz8adVhzoqPmwmSUBAM38ab';
         $ciphertext = openssl_encrypt($plaintext, $method, $key, OPENSSL_RAW_DATA, $iv);
         $hash = hash_hmac('sha256', $ciphertext . $iv, $key, false);
-        return $iv . $hash . $ciphertext;
+        return  $hash;
     }
 
     public static  function decrypt($pin) {
         try {
-            $encryption_key = "aesEncryptionKey";
+            define('AES_256_CBC', 'aes-256-cbc');
+            $encryption_key = env('APP_KEY');
             $iv = 'encryptionIntVec';
             $encrypted = $pin . ':' . base64_encode($iv);
             $parts = explode(':', $encrypted);
-            $decrypted = openssl_decrypt($parts[0], 'aes-128-cbc', $encryption_key, 0, base64_decode($parts[1]));
+            $decrypted = openssl_decrypt($parts[0], AES_256_CBC, $encryption_key, 0, base64_decode($parts[1]));
             return array(
                 'code'          => '00',
-                'pin'           =>  $decrypted
+                'pin'           =>  $decrypted,
+                'error_message' =>  'No error',
             );
 
-        }catch(Exception $exception){
+        }catch(\Exception $exception){
             return array(
                 'code'          => '01',
-                'pin'           => false
+                'pin'           => false,
+                'error_message'           => $exception->getMessage(),
             );
         }
     }
