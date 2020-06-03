@@ -1,10 +1,6 @@
 <?php
 
 namespace App\Services;
-
-
-
-
 use Mockery\Exception;
 
 class AES {
