@@ -7,7 +7,7 @@ namespace App\Services;
 
 use Mockery\Exception;
 
-Class AESCtrl extends Aes
+Class AESCtrl extends AES
 {
     /**
      * Encrypt a text using AES encryption in Counter mode of operation
