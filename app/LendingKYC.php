@@ -14,7 +14,7 @@ class LendingKYC extends Model implements Authenticatable
 {
 
     use AuthenticableTrait;
-    protected $hidden = ['id','status','verified','password','auth_attempts','created_at','updated_at'];
+    protected $hidden = ['status','verified','password','auth_attempts','created_at','updated_at'];
     protected $guarded = [];
     protected $table = 'lending_kyc';
 

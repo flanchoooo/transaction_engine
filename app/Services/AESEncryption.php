@@ -21,12 +21,7 @@ class AESEncryption
 
     public static  function decrypt($pin) {
         try {
-            define('AES_256_CBC', 'aes-256-cbc');
-            $encryption_key = env('APP_KEY');
-            $iv = 'encryptionIntVec';
-            $encrypted = $pin . ':' . base64_encode($iv);
-            $parts = explode(':', $encrypted);
-            $decrypted = openssl_decrypt($parts[0], AES_256_CBC, $encryption_key, 0, base64_decode($parts[1]));
+            $decrypted = AESCtrl::decrypt($pin,env('APP_KEY'),256);
             return array(
                 'code'          => '00',
                 'pin'           =>  $decrypted,

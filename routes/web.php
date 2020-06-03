@@ -185,8 +185,23 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
     $app->get('/lending/pending/approval','LoanAdministrationController@pendingApprovals');
     $app->post('/lending/update', 'LoanAdministrationController@updateLoansApplication');
     $app->post('/lending/download/kyc',  'LoanAdministrationController@pendingApprovals');
-    $app->post('/lending/loan/book',  'LoanAdministrationController@loanBook');
+
+
+    //Loan profile
     $app->post('/lending/profile',  'LoanAdministrationController@profile');
+    $app->post('/lending/payment',  'LoanAdministrationController@payment');
+    $app->post('/lending/loan/profile',  'LoanAdministrationController@loanProfile');
+    $app->post('/lending/loan/profile/search',  'LoanAdministrationController@search');
+
+    //Loan Book Position
+    $app->get('/lending/loan/book',  'LoanAdministrationController@loanBook');
+
+    //Evalue
+    $app->post('e_value_management',  'WalletEValueController@e_value_management');
+    $app->get('pending_approval',  'WalletEValueController@all_e_value_management');
+    $app->get('pending_approvals',  'WalletEValueController@all_destroy_value');
+
+
 
 });
 

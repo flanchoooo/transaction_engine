@@ -15,6 +15,29 @@ use Illuminate\Support\Facades\Validator;
 
 class WalletSignUpController extends Controller
 {
+    function encrypt($plaintext, $password) {
+        $method = "AES-256-CBC";
+        $key = hash('sha256', $password, true);
+        $iv = openssl_random_pseudo_bytes(16);
+
+        $ciphertext = openssl_encrypt($plaintext, $method, $key, OPENSSL_RAW_DATA, $iv);
+        $hash = hash_hmac('sha256', $ciphertext . $iv, $key, true);
+
+        return $iv . $hash . $ciphertext;
+    }
+
+    function decrypt($ivHashCiphertext, $password) {
+        $method = "AES-256-CBC";
+        $iv = substr($ivHashCiphertext, 0, 16);
+        $hash = substr($ivHashCiphertext, 16, 32);
+        $ciphertext = substr($ivHashCiphertext, 48);
+        $key = hash('sha256', $password, true);
+
+        if (!hash_equals(hash_hmac('sha256', $ciphertext . $iv, $key, true), $hash)) return null;
+
+        return openssl_decrypt($ciphertext, $method, $key, OPENSSL_RAW_DATA, $iv);
+    }
+
     public function wallet_sign_up(Request $request){
         $validator = $this->wallet_kyc($request->all());
         if ($validator->fails()) {
@@ -28,8 +51,9 @@ class WalletSignUpController extends Controller
                 return response([
                     'code' => '807',
                     'description' => 'Invalid authorization credentials',
-                ],201);
+                ],401);
             }
+
             $wallet = new  Wallet();
             $wallet->mobile         = $request->mobile;
             $wallet->first_name     = $request->first_name;
@@ -62,12 +86,14 @@ class WalletSignUpController extends Controller
                 return response([
                     'code'          => '100',
                     'description'   => 'Mobile wallet details already registered.',
+                    'error_message' => $exception->getMessage(),
                 ],500);
             }
 
             return response([
                 'code' => '100',
                 'description' => 'Registration failed,please contact support for assistance',
+                'error_message' => $exception->getMessage(),
             ],500);
         }
 
@@ -119,6 +145,7 @@ class WalletSignUpController extends Controller
                 return response([
                     'code' => '807',
                     'description' => 'Invalid old pin credentials',
+                    'error_message' => $old_pin["error_message"],
                 ],201);
             }
 
@@ -163,7 +190,6 @@ class WalletSignUpController extends Controller
         }
 
     }
-
 
 
     protected function wallet_kyc(Array $data)

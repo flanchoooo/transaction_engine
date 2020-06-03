@@ -224,7 +224,6 @@ class WalletATMWithdrawalController extends Controller
             ->whereIn('txn_type_id', [SEND_MONEY,CASH_PICK_UP])
             ->sum('transaction_amount');
 
-
         if($wallet_cos->maximum_monthly <  $monthly_spent){
             return array('code' => '902', 'description' => 'Wallet monthly limit reached.');
         }

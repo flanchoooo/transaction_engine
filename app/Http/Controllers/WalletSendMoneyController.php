@@ -31,7 +31,7 @@ class WalletSendMoneyController extends Controller
         if($request->source_mobile == $request->destination_mobile) {
             return response(['code' => '100', 'description' => 'Transaction request is not permitted.',],400);
         }
-        $transaction = TransactionType::find(SEND_MONEY)->first();
+        $transaction = TransactionType::find(SEND_MONEY);
         if(!isset($transaction)){
             return response(['code' => '100', 'description' => 'Unknown transaction type.',],400);
         }

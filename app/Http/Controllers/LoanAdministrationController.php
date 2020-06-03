@@ -46,12 +46,12 @@ class LoanAdministrationController extends Controller
 
             if($affordability > $loanClassOfService->affordability_ratio){
                 $percentage = $loanClassOfService->affordability_ratio * 100;
-                $narration =  'Loan amount should not exceed '.$percentage.' % '.' of your  net salary';
+                $narration =  'Loan amount should not exceed '.$percentage.' % '.' of applicant  net salary';
                 $updateLoan->status = 'DECLINED';
                 $updateLoan->description = $narration;
                 $updateLoan->save();
                 DB::commit();
-                return response(['code' => '00', 'description' => 'Loan amount should not exceed '.$percentage.' % '.' of your  net salary',],200);
+                return response(['code' => '00', 'description' => 'Loan amount should not exceed '.$percentage.' % '.' of applicant  net salary',],200);
             }
 
             if($request->status == 'DECLINED'){
@@ -64,6 +64,20 @@ class LoanAdministrationController extends Controller
 
 
             if($request->status == 'PENDING AUTHORIZATION'){
+                $total = LoanHistory::whereApplicantId($updateLoan->applicant_id)
+                    ->where('status','=','AUTHORIZED')->sum('amount');
+                $total_loans = $total + $updateLoan->amount;
+                $affordability = $total_loans/ $loanApplicant->salary;
+                if($affordability > $loanClassOfService->affordability_ratio){
+                    $percentage = $loanClassOfService->affordability_ratio * 100;
+                    $narration =  'Total loan profiles should not exceed '.$percentage.' % '.' of applicant  net salary';
+                    $updateLoan->status = 'DECLINED';
+                    $updateLoan->description = $narration;
+                    $updateLoan->save();
+                    DB::commit();
+                    return response(['code' => '00', 'description' =>  'Total loan profiles should not exceed '.$percentage.' % '.' of applicant  net salary',],200);
+                }
+
                 $updateLoan->status = 'PENDING AUTHORIZATION';
                 $updateLoan->description = 'Loan documents and details have been approved.';
                 $updateLoan->save();
@@ -83,19 +97,19 @@ class LoanAdministrationController extends Controller
                   $loanProfile->draw_down_fee = $loanFees["draw_down_fee"];
                   $loanProfile->status = 'PENDING PAYMENT';
                   $loanProfile->loan_id  =$request->id;
+                  $loanProfile->applicant_id  =$updateLoan->applicant_id;
                   $loanProfile->time_period  = $x;
-                  $loanProfile->loan_balance  -=$updateLoan->amount - $loanFees["installment_fee_inclusive"];
                   $loanProfile->save();
                   DB::commit();
                 }
-                $updateLoan->status = 'LOAN APPROVED';
+                $updateLoan->status = 'AUTHORIZED';
                 $updateLoan->description = 'Loan successfully approved.';
                 $updateLoan->save();
-                return response(['code' => '00', 'description' => 'Loan successfully approved.',],200);
+                return response(['code' => '00', 'description' => 'Loan successfully authorized.',],200);
             }
         }catch (\Exception $exception){
             DB::rollBack();
-            return response(['code' => '100', 'description' => 'Please contact support for assistance.',],500);
+            return response(['code' => '100', 'description' => 'Please contact support for assistance.', 'error_message' => $exception->getMessage()],500);
         }
     }
 
@@ -125,32 +139,28 @@ class LoanAdministrationController extends Controller
 
         try {
 
-            $loanId = LoanHistory::whereId($request->applicant_details)->first();
-            $applicant = LendingKYC::whereId($loanId->applicant_id)->first();
-            $repayment = LoanEngine::whereLoanId($loanId->id)->get();
-            $sum = LoanEngine::whereLoanId($loanId->id)
-                                ->whereStatus('PAID')->sum('installment_fee_inclusive');
-            if(!isset($applicant)){
-                return response(['code' => '100', 'description' => 'Applicant not found'],400);
-            }
-            $balance = $loanId->amount - $sum;
-            return response([
-                'loan_profile' => $loanId,
-                'loan_applicant' =>$applicant,
-                'loan_repayment' => $repayment,
-                'loan_balance' =>  $balance
-            ]);
+             $loanId = LoanHistory::whereId($request->applicant_details)->first();
+             $applicant = LendingKYC::whereId($loanId->applicant_id)->first();
+             $loansByApplicant = LoanHistory::whereApplicantId($applicant->id)->whereIn('status',['PENDING APPROVAL','PENDING AUTHORIZATION','AUTHORIZED'])->get();
+             $sum = LoanEngine::whereApplicantId($loanId->applicant_id)->whereStatus('PAID')->sum('installment_fee_inclusive');
+             $loans_sum = LoanHistory::whereApplicantId($loanId->applicant_id)->whereStatus('AUTHORIZED')->sum('amount');
+
+            $balance = $loans_sum - $sum;
+
+            $data = [
+                'loan_profile'      => $loansByApplicant,
+                'loan_applicant'    => $applicant,
+                'loan_balance'      =>  $balance
+            ];
+            return response(
+                $data
+            );
         }catch (\Exception $exception){
             return response(['code' => '100', 'description' => 'Please contact support for assistance.', 'error_message' => $exception->getMessage()],500);
         }
     }
 
-    public function loanBook(Request $request){
-        $validator = $this->profileValidator($request->all());
-        if ($validator->fails()) {
-            return response()->json(['code' => '99', 'description' => $validator->errors()],400);
-        }
-
+    public function loanBook(){
         try {
             $sum = LoanEngine::whereStatus('PENDING PAYMENT')->sum('installment_fee_inclusive');
             $int = LoanEngine::whereStatus('PAID')->sum('interest_earnings');
@@ -171,18 +181,75 @@ class LoanAdministrationController extends Controller
 
         DB::beginTransaction();
         try {
-            $repayment = LoanEngine::whereId($request->loan_repayment_id)->where('status' ,'=', 'PENDING PAYMENT')->lockForUpdate()->first();
-            $repayment->status = 'PAID';
-            $repayment->description = 'Loan payment successfully processed.';
-            $repayment->save();
-            DB::commit();
-            return response(['code' => '00', 'description' =>'Loan successfully paid']);
+            $loan_repayment_record = LoanEngine::where('id',$request->loan_repayment_id)->lockForUpdate()->first();
+            if($loan_repayment_record->status == 'PAID'){
+                return response(['code' => '00', 'description' =>'Loan already paid.']);
+            }
+
+                $loan_repayment_record->status = 'PAID';
+                $loan_repayment_record->loan_payment = $loan_repayment_record->monthly_installments;
+                $loan_repayment_record->loan_payment = $loan_repayment_record->monthly_installments;
+                $loan_repayment_record->description = 'Loan payment successfully processed.';
+                $loan_repayment_record->save();
+                DB::commit();
+                return response(['code' => '00', 'description' =>'Loan successfully paid']);
+
         }catch (\Exception $exception){
             DB::rollBack();
             return response(['code' => '100', 'description' => 'Please contact support for assistance.', 'error_message' => $exception->getMessage()],500);
         }
     }
 
+    public function loanProfile(Request $request){
+        $validator = $this->loanprofileValidator($request->all());
+        if ($validator->fails()) {
+            return response()->json(['code' => '99', 'description' => $validator->errors()],400);
+        }
+
+        try {
+
+            return response(
+                LoanEngine::whereLoanId($request->loan_id)->get()
+            );
+        }catch (\Exception $exception){
+            return response(['code' => '100', 'description' => 'Please contact support for assistance.', 'error_message' => $exception->getMessage()],500);
+        }
+    }
+
+    public function search(Request $request){
+        $validator = $this->profileValidator($request->all());
+        if ($validator->fails()) {
+            return response()->json(['code' => '99', 'description' => $validator->errors()],400);
+        }
+
+        if (filter_var($request->applicant_details, FILTER_VALIDATE_EMAIL)) {
+            $filter = 'email';
+        }else{
+            $filter = 'mobile';
+        }
+        try {
+            $applicant = LendingKYC::where("$filter",$request->applicant_details)->first();
+            if(!isset($applicant)){
+                return response(['code' => '100', 'description' => 'Applicant not found.',]);
+            }
+            $loansByApplicant = LoanHistory::whereApplicantId($applicant->id)->whereIn('status',['PENDING APPROVAL','PENDING AUTHORIZATION','AUTHORIZED'])->get();
+            $sumPaid = LoanEngine::whereApplicantId($applicant->id)->whereStatus('PAID')->sum('loan_payment');
+            $loans_sum = LoanHistory::whereApplicantId($applicant->id)->whereStatus('AUTHORIZED')->sum('amount');
+
+            $data = [
+                'code'              => '00',
+                'description'       => 'Success',
+                'loan_profile'      => $loansByApplicant,
+                'loan_applicant'    => $applicant,
+                'loan_balance'      =>  $loans_sum - $sumPaid
+            ];
+            return response(
+                $data
+            );
+        }catch (\Exception $exception){
+            return response(['code' => '100', 'description' => 'Please contact support for assistance.', 'error_message' => $exception->getMessage()],500);
+        }
+    }
 
     protected function updateLoansApplicationValidator(Array $data)
     {
@@ -198,6 +265,15 @@ class LoanAdministrationController extends Controller
     {
         return Validator::make($data, [
             'applicant_details'            => 'required',
+        ]);
+
+
+    }
+
+    protected function loanprofileValidator(Array $data)
+    {
+        return Validator::make($data, [
+            'loan_id'            => 'required',
         ]);
 
 
