@@ -105,14 +105,14 @@ class LendingKycController extends Controller
 
 
             if($lendingProfile->status != "ACTIVE"){
-                return response(['code' => '100', 'description' => 'Account is blocked',],201);
+                return response(['code' => '100', 'description' => 'Account is blocked',],401);
             }
 
             if($lendingProfile->auth_attempts > 2){
                 $lendingProfile->status = "BLOCKED";
                 $lendingProfile->save();
                 DB::commit();
-                return response(['code' => '100', 'description' => 'Account is blocked'],201);
+                return response(['code' => '100', 'description' => 'Account is blocked'],401);
             }
 
 
@@ -127,7 +127,7 @@ class LendingKycController extends Controller
             $lendingProfile->auth_attempts+=1;
             $lendingProfile->save();
             DB::commit();
-            return response(['code' => '100','description' => 'Invalid login credentials',],400);
+            return response(['code' => '100','description' => 'Invalid login credentials',],401);
 
         }catch (\Exception $exception){
             DB::rollback();
