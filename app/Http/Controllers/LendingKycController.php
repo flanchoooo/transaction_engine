@@ -98,7 +98,7 @@ class LendingKycController extends Controller
         }
         DB::beginTransaction();
         try {
-          $lendingProfile = LendingKYC::whereMobile($request->mobile)->first();
+          $lendingProfile = LendingKYC::whereEmail($request->email)->first();
             if(!isset($lendingProfile)){
                 return response(['code' => '100', 'description' => 'Invalid login credentials'],400);
             }
