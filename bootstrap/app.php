@@ -4,6 +4,11 @@ require_once __DIR__.'/../vendor/autoload.php';
 
 require_once __DIR__ . '/transaction_type.php';
 
+
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: *');
+header('Access-Control-Allow-Headers: *');
+
 try {
     (new Dotenv\Dotenv(dirname(__DIR__)))->load();
 } catch (Dotenv\Exception\InvalidPathException $e) {
@@ -20,9 +25,7 @@ try {
 | application as an "IoC" container and router for this framework.
 |
 */
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: *');
-header('Access-Control-Allow-Headers: *');
+
 
 $app = new Laravel\Lumen\Application(
     dirname(__DIR__)
