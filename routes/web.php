@@ -169,6 +169,17 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
     //Pay Merchant
     $app->post('/pay/merchant',  'WalletPayMerchantController@payMerchant');
 
+    //Loan KYC
+    $app->post('/lending/register',  'LendingKycController@register');
+    $app->post('/lending/email',  'LendingKycController@send');
+    $app->post('/lending/login',  'LendingKycController@login');
+    $app->post('/lending/kyc/update',  'LendingKycController@updateKyc');
+
+    //Loan Application
+    $app->post('/lending/apply',  'LoanApplicationController@apply');
+    $app->post('/lending/history',  'LoanApplicationController@history');
+    $app->post('/lending/cancel/loan',  'LoanApplicationController@cancel');
+    $app->post('/lending/upload/documents',  'LoanApplicationController@upload');
 
     //Loan Administration Controller
     $app->get('/lending/pending/approval','LoanAdministrationController@pendingApprovals');
@@ -190,19 +201,7 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
     $app->get('pending_approval',  'WalletEValueController@all_e_value_management');
     $app->get('pending_approvals',  'WalletEValueController@all_destroy_value');
 
-
-
 });
 
 
-//Loan KYC
-$app->post('/lending/register',  'LendingKycController@register');
-$app->post('/lending/email',  'LendingKycController@send');
-$app->post('/lending/login',  'LendingKycController@login');
-$app->post('/lending/kyc/update',  'LendingKycController@updateKyc');
 
-//Loan Application
-$app->post('/lending/apply',  'LoanApplicationController@apply');
-$app->post('/lending/history',  'LoanApplicationController@history');
-$app->post('/lending/cancel/loan',  'LoanApplicationController@cancel');
-$app->post('/lending/upload/documents',  'LoanApplicationController@upload');

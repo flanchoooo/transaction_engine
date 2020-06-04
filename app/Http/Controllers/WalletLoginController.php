@@ -18,17 +18,6 @@ class WalletLoginController extends Controller
 {
 
     public function login(Request $request){
-
-
-
-       // return AESCtrl::encrypt('1234',env('APP_KEY'),256);
-
-
-
-
-
-
-
         $validator = $this->wallet_kyc($request->all());
         if ($validator->fails()) {
             return response()->json(['code' => '99', 'description' => $validator->errors()]);
