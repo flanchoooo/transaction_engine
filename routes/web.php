@@ -201,6 +201,8 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
     $app->get('pending_approval',  'WalletEValueController@all_e_value_management');
     $app->get('pending_approvals',  'WalletEValueController@all_destroy_value');
 
+
+
 });
 
 
