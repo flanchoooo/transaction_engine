@@ -56,6 +56,42 @@ class LendingKycController extends Controller
 
     }
 
+    public function password(Request $request){
+        $validator = $this->passwordValidation($request->all());
+        if ($validator->fails()) {
+            return response()->json(['code' => '99', 'description' => $validator->errors()],400);
+        }
+        DB::beginTransaction();
+        try {
+
+            $register = LendingKYC::whereEmail($request->email)->first();
+            if(!isset($register)){
+               return response(['code'  => '100', 'description'   => 'Email not found',],400);
+            }
+;
+            $password = $register->password;
+            if(isset($password)){
+                return response(['code'  => '100', 'description'   => 'Password already set for this account.',],400);
+            }
+
+            $register->password =Hash::make($request->password);
+            $register->password = $request->email;
+            $register->save();
+            DB::commit();
+            return response(['code'  => '000', 'description'   => 'Password successfully set.',
+            ]);
+
+        }catch (\Exception $exception){
+            DB::rollback();
+            return response([
+                'code' => '100',
+                'description' => 'Please contact support for assistance.',
+                'error_message' => $exception->getMessage(),
+            ],500);
+        }
+
+    }
+
     public function send(Request $request){
         $validator = $this->sendMailValidator($request->all());
         if ($validator->fails()) {
@@ -200,6 +236,16 @@ class LendingKycController extends Controller
             'amount'            => 'required',
             'first_name'        => 'required | max:64',
             'last_name'         => 'required',
+            'email'             => 'required',
+        ]);
+
+
+    }
+
+    protected function passwordValidation(Array $data)
+    {
+        return Validator::make($data, [
+            'password'         => 'required',
             'email'             => 'required',
         ]);
 
