@@ -2,10 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\ATMOTP;
 use App\LendingKYC;
+use App\OTP;
 use App\Services\AESEncryption;
 use App\Services\OTPService;
+use App\Services\WalletFeesCalculatorService;
+use App\TransactionType;
 use App\Wallet;
+use App\WalletTransactions;
 use Carbon\Carbon;
 use GuzzleHttp\Client;
 use Illuminate\Http\Request;
@@ -64,14 +69,16 @@ class LendingKycController extends Controller
         DB::beginTransaction();
         try {
 
-            $register = LendingKYC::whereEmail($request->email)->first();
-            if(!isset($register)){
-               return response(['code'  => '100', 'description'   => 'Email not found',],400);
+             $register = LendingKYC::whereEmail($request->email)->first();
+
+            if(isset($register)){
+               return response(['code'  => '100', 'description'   => 'Email not found',
+                ],400);
             }
-;
-            $password = $register->password;
-            if(isset($password)){
-                return response(['code'  => '100', 'description'   => 'Password already set for this account.',],400);
+
+            if(!$register->password->isNull()){
+                return response(['code'  => '100', 'description'   => 'Password already',
+                ],400);
             }
 
             $register->password =Hash::make($request->password);
@@ -83,10 +90,17 @@ class LendingKycController extends Controller
 
         }catch (\Exception $exception){
             DB::rollback();
+            $code = $exception->getCode();
+            if($code == "23000"){
+                return response([
+                    'code'          => '100',
+                    'description'   => 'Email account is already taken.',
+                ],500);
+            }
+
             return response([
                 'code' => '100',
                 'description' => 'Please contact support for assistance.',
-                'error_message' => $exception->getMessage(),
             ],500);
         }
 
@@ -123,6 +137,101 @@ class LendingKycController extends Controller
                 'code' => '100',
                 'description' => 'Please contact system administrator for assistance. ',
             ],500);
+        }
+
+    }
+
+    public function generateOtp(Request $request){
+        $validator = $this->sendMailValidator($request->all());
+        if ($validator->fails()) {
+            return response()->json(['code' => '99', 'description' => $validator->errors()],400);
+        }
+
+        try {
+         $mail = LendingKYC::whereEmail($request->email)->first();
+         $atm_code = OTPService::generateATMWithdrawlOtp();
+         if(!isset($mail)){
+             return response([
+                 'code' => '000',
+                 'description' => 'If your email is registered with us you will receive a verification.',
+             ]);
+         }
+         $client = new Client();
+         $result = $client->post(env('NOTIFY').'/api/mail',
+             ['json' => [
+                 'name' => $mail->first_name,
+                 'email' => $request->email,
+                 'otp' =>$atm_code["authorization_code"]
+             ],
+         ]);
+         $result->getBody()->getContents();
+
+            $update = new ATMOTP();
+            $update->amount = $request->amount;
+            $update->type = "ATM";
+            $update->expired = 0;
+            $update->authorization_otp = $atm_code["authorization_code"];
+            $update->mobile =  $request->email;
+            $update->save();
+            DB::commit();
+         return response([
+                'code' => '000',
+                'description' => 'If your email is registered with us you will receive a verification.',
+         ]);
+        }catch (\Exception $exception){
+            return response([
+                'code' => '100',
+                'description' => 'Please contact system administrator for assistance. ',
+            'error_message' => $exception->getMessage()],500);
+        }
+
+    }
+
+    public function validateOtp(Request $request){
+
+        $validator = $this->otpValidationValidator($request->all());
+        if ($validator->fails()) {
+            return response()->json(['code' => '99', 'description' => $validator->errors()],400);
+
+        }
+
+        DB::beginTransaction();
+        try {
+            //TODO -- SECURE OTP
+            $otp = ATMOTP::whereAuthorizationOtp($request->otp)
+                ->whereMobile($request->email)
+                ->first();
+
+            if(!isset($otp)){
+                return response(['code'=> '100', 'description' => 'Invalid OTP.'],400);
+            }
+
+            if($otp->expired == 1){
+                return response(['code'=> '102', 'description' => 'Invalid OTP.'],400);
+            }
+
+            $validity =  ATMOTP::whereAuthorizationOtp($request->otp)
+                ->whereMobile($request->email)
+                ->where('created_at', '>', Carbon::now()->subMinutes(30))
+                ->first();
+
+            if(!isset($validity)){
+                $otp->expired =1;
+                $otp->save();
+                DB::commit();
+                return response(['code'=> '100', 'description' => 'OTP expired.'],400);
+            }
+
+            $otp->expired =1;
+            $otp->save();
+            DB::commit();
+            return response(['code' => '000', 'OTP successfully validated.']);
+        }catch (\Exception $exception){
+            DB::rollBack();
+            if($exception->getCode() == "23000"){
+                return response(['code' => '100', 'description' => 'Invalid transaction request.','error_message' => $exception->getMessage()],500);
+            }
+            return response(['code' => '100', 'description' => 'Your request could be processed please try again later.','error_message' => $exception->getMessage(),],500);
         }
 
     }
@@ -286,6 +395,16 @@ class LendingKycController extends Controller
         return Validator::make($data, [
             'email'            => 'required',
             'password'         => 'required',
+        ]);
+
+
+    }
+
+    protected function otpValidationValidator(Array $data)
+    {
+        return Validator::make($data, [
+            'email'            => 'required',
+            'otp'         => 'required',
         ]);
 
 

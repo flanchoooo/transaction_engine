@@ -175,6 +175,8 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
     $app->post('/lending/email',  'LendingKycController@send');
     $app->post('/lending/login',  'LendingKycController@login');
     $app->post('/lending/kyc/update',  'LendingKycController@updateKyc');
+    $app->post('/lending/generate/otp',  'LendingKycController@generateOtp');
+    $app->post('/lending/validate/otp',  'LendingKycController@validateOtp');
 
     //Loan Application
     $app->post('/lending/apply',  'LoanApplicationController@apply');

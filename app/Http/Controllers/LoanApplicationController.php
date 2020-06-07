@@ -90,10 +90,12 @@ class LoanApplicationController extends Controller
             $code = $exception->getCode();
             if($code == "23000"){
                 return response([
-                    'code' => '100', 'description'  => 'Email account is already taken.',],500);
+                    'code' => '100', 'description'  => 'Email account is already taken.',
+                    'error_message' => $exception->getMessage()],400);
             }
             return response([
-                'code' => '100', 'description' => 'Please contact support for assistance.',],500);
+                'code' => '100', 'description' => 'Please contact support for assistance.',
+                'error_message' => $exception->getMessage()],500);
         }
     }
 
