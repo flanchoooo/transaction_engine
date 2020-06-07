@@ -69,15 +69,14 @@ class LendingKycController extends Controller
         DB::beginTransaction();
         try {
 
-             $register = LendingKYC::whereEmail($request->email)->first();
-
-            if(isset($register)){
+            $register = LendingKYC::whereEmail($request->email)->first();
+            if(!isset($register)){
                return response(['code'  => '100', 'description'   => 'Email not found',
                 ],400);
             }
 
-            if(!$register->password->isNull()){
-                return response(['code'  => '100', 'description'   => 'Password already',
+            if(isset($register->password)){
+                return response(['code'  => '100', 'description'   => 'Profile already active.',
                 ],400);
             }
 
@@ -90,17 +89,9 @@ class LendingKycController extends Controller
 
         }catch (\Exception $exception){
             DB::rollback();
-            $code = $exception->getCode();
-            if($code == "23000"){
-                return response([
-                    'code'          => '100',
-                    'description'   => 'Email account is already taken.',
-                ],500);
-            }
-
             return response([
                 'code' => '100',
-                'description' => 'Please contact support for assistance.',
+                'description' => 'Please contact support for assistance.','error_message' => $exception->getMessage()
             ],500);
         }
 
@@ -253,7 +244,7 @@ class LendingKycController extends Controller
                 return response(['code' => '100', 'description' => 'Account is blocked',],401);
             }
 
-            if($lendingProfile->auth_attempts > 2){
+            if($lendingProfile->auth_attempts > 10){
                 $lendingProfile->status = "BLOCKED";
                 $lendingProfile->save();
                 DB::commit();
