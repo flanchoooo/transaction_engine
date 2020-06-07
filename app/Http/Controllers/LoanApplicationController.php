@@ -122,6 +122,30 @@ class LoanApplicationController extends Controller
         }
     }
 
+    public function pendingApproval(Request $request){
+        $validator = $this->historyValidator($request->all());
+        if ($validator->fails()) {
+            return response()->json(['code' => '99', 'description' => $validator->errors()],400);
+        }
+        DB::beginTransaction();
+        try {
+            $user = LendingKYC::whereEmail($request->email)->first();
+            if(!isset($user)){
+                return response([
+                    'code' => '100', 'description' => 'Please contact support for assistance.',],400);
+            }
+            $loan_history = LoanHistory::whereApplicantId($user->id)
+                ->where('status','=', 'PENDING APPROVAL')
+                ->get();
+            return response([
+                'code' => '000',
+                'data' => $loan_history,],200);
+        }catch (\Exception $exception){
+            return response(['code' => '100', 'description' => 'Please contact support for assistance.','error_message'
+            => $exception->getMessage()],500);
+        }
+    }
+
     public function cancel(Request $request){
         $validator = $this->cancelValidator($request->all());
         if ($validator->fails()) {
