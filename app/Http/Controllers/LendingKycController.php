@@ -81,7 +81,7 @@ class LendingKycController extends Controller
             }
 
             $register->password =Hash::make($request->password);
-            $register->password = $request->email;
+            $register->status ='ACTIVE';
             $register->save();
             DB::commit();
             return response(['code'  => '000', 'description'   => 'Password successfully set.',
