@@ -216,7 +216,7 @@ class LendingKycController extends Controller
             $otp->expired =1;
             $otp->save();
             DB::commit();
-            return response(['code' => '000', 'OTP successfully validated.']);
+            return response(['code' => '000', 'description'=> 'OTP successfully validated.']);
         }catch (\Exception $exception){
             DB::rollBack();
             if($exception->getCode() == "23000"){
