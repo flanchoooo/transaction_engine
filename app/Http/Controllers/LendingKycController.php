@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\ATMOTP;
 use App\LendingKYC;
+use App\LoanHistory;
 use App\OTP;
 use App\Services\AESEncryption;
 use App\Services\OTPService;
@@ -230,18 +231,20 @@ class LendingKycController extends Controller
     }
 
     public function login(Request $request){
+
+
         $validator = $this->loginValidator($request->all());
         if ($validator->fails()) {
             return response()->json(['code' => '99', 'description' => $validator->errors()],400);
         }
         DB::beginTransaction();
         try {
-          $lendingProfile = LendingKYC::whereEmail($request->email)->first();
+            $lendingProfile = LendingKYC::whereEmail($request->email)->first();
             if(!isset($lendingProfile)){
                 return response(['code' => '100', 'description' => 'Invalid login credentials'],400);
             }
 
-
+            $loans = LoanHistory::whereApplicantId($lendingProfile->id)->get();
             if($lendingProfile->status != "ACTIVE"){
                 return response(['code' => '100', 'description' => 'Account is blocked',],401);
             }
@@ -259,7 +262,9 @@ class LendingKycController extends Controller
                 $lendingProfile->verified = 1;
                 $lendingProfile->save();
                 DB::commit();
-                return response(['code' => '000', 'description' => 'Login successful', 'data'=> $lendingProfile]);
+                return response(['code' => '000', 'description' => 'Login successful', '
+                data'=> $lendingProfile,
+                'loans' => $loans]);
             }
 
             $lendingProfile->auth_attempts+=1;
