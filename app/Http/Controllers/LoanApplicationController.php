@@ -43,7 +43,7 @@ class LoanApplicationController extends Controller
                 return response(['code' => '100', 'description' => 'Invalid profile'],400);
             }
 
-             $loanClass = LoanClassofService::find($request->loan_cos);
+            $loanClass = LoanClassofService::find($request->loan_cos);
             $repayment = $this->calcPmt($request->amount,$loanClass->interest_rate,$request->loan_tenure);
             if($lendingProfile->initial_amount > 0){
                 $application = new Loans();
@@ -52,7 +52,7 @@ class LoanApplicationController extends Controller
                 $application->loan_cos = $request->loan_cos;
                 $application->status = 'PENDING DOCUMENT UPLOAD';
                 $application->employee_reference = 'XEC';
-                $application->loan_duration = $request->loan_tenure;
+                $application->loan_duration = $lendingProfile->loan_tenure;
                 $application->description = 'Loan application successfully submitted, pending document uploads';
                 $lendingProfile->initial_amount =0;
                 $lendingProfile->save();
