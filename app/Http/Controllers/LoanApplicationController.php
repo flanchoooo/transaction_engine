@@ -63,7 +63,10 @@ class LoanApplicationController extends Controller
                     'description'           => 'Loan application successfully submitted, please proceed to upload supporting documents.',
                     'monthly_installments'  => $repayment,
                     'draw_down_fee'         => $loanClass->draw_down_fee,
-                    'establishment_fee'     => $loanClass->establishment_fee]);
+                    'establishment_fee'     => $loanClass->establishment_fee,
+                    'data'                  =>$application
+                ]);
+
             }
 
             $application = new Loans();
@@ -84,7 +87,9 @@ class LoanApplicationController extends Controller
                 'description'           => 'Loan application successfully submitted, please proceed to upload supporting documents.',
                 'monthly_installments'  => $repayment,
                 'draw_down_fee'         => $loanClass->draw_down_fee,
-                'establishment_fee'     => $loanClass->establishment_fee]);
+                'establishment_fee'     => $loanClass->establishment_fee,
+               'data'                  =>$application
+            ]);
         }catch (\Exception $exception){
             DB::rollback();
             $code = $exception->getCode();

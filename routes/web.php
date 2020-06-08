@@ -183,6 +183,7 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
     $app->post('/lending/history',  'LoanApplicationController@history');
     $app->post('/lending/cancel/loan',  'LoanApplicationController@cancel');
     $app->post('/lending/upload/documents',  'LoanApplicationController@upload');
+    $app->post('/lending/pending/approval',  'LoanApplicationController@pendingApproval');
 
     //Loan Administration Controller
     $app->get('/lending/pending/approval','LoanAdministrationController@pendingApprovals');
