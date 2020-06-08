@@ -50,12 +50,14 @@ class LendingKycController extends Controller
                 return response([
                     'code'          => '100',
                     'description'   => 'Email account is already taken.',
-                ],500);
+                    'error_message'   =>$exception->getMessage(),
+                ],400);
             }
 
             return response([
                 'code' => '100',
                 'description' => 'Please contact support for assistance.',
+                'error_message'   =>$exception->getMessage(),
             ],500);
         }
 
