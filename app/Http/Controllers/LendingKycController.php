@@ -309,7 +309,11 @@ class LendingKycController extends Controller
 
         }catch (\Exception $exception){
             DB::rollback();
-            return response(['code' => '100', 'description' => 'Login Failed.',],500);
+            return response(['code' => '100',
+                            'description' => 'Failed to update kyc',
+                            'error_message' => $exception->getMessage(),]
+
+                ,500);
         }
 
     }
