@@ -77,7 +77,7 @@ class LoanApplicationController extends Controller
             $application->status = 'PENDING APPROVAL';
             $application->employee_reference = 'XEC';
             $application->description = 'Loan application successfully submitted';
-            $application->loan_duration = $request->loan_tenure;
+            $application->loan_duration = $request->tenure;
             $lendingProfile->initial_amount =0;
             $lendingProfile->save();
             $application->save();
