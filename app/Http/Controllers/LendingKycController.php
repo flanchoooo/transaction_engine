@@ -38,6 +38,7 @@ class LendingKycController extends Controller
             $register->first_name = $request->first_name;
             $register->last_name = $request->last_name;
             $register->verified =0;
+            $register->tenure =$request->tenure;
             $register->email = $request->email;
             $register->save();
             DB::commit();
@@ -262,19 +263,20 @@ class LendingKycController extends Controller
                 $lendingProfile->verified = 1;
                 $lendingProfile->save();
                 DB::commit();
-                return response(['code' => '000', 'description' => 'Login successful', '
-                data'=> $lendingProfile,
+                return response(['code' => '000', 'description' => 'Login successful', 'data'=> $lendingProfile,
                 'loans' => $loans]);
             }
 
             $lendingProfile->auth_attempts+=1;
             $lendingProfile->save();
             DB::commit();
-            return response(['code' => '100','description' => 'Invalid login credentials',],401);
+            return response(['code' => '100','description' => 'Incorrect username or password',],401);
 
         }catch (\Exception $exception){
             DB::rollback();
-            return response(['code' => '100', 'description' => 'Login Failed.',],500);
+            return response(['code' => '100',
+                'description' => 'Login Failed.',
+                'error_message' => $exception->getMessage()],500);
         }
 
     }
@@ -300,6 +302,7 @@ class LendingKycController extends Controller
             $lendingProfile->initial_amount = $request->initial_amount;
             $lendingProfile->mobile = $request->mobile;
             $lendingProfile->dob = $request->dob;
+            $lendingProfile->tenure = $request->tenure;
             $lendingProfile->salary = $request->salary;
             $lendingProfile->address = $request->address;
             $lendingProfile->account_number = $request->account_number;
@@ -318,28 +321,7 @@ class LendingKycController extends Controller
 
     }
 
-    function encrypt($plaintext, $password) {
-        $method = "AES-256-CBC";
-        $key = hash('sha256', $password, true);
-        $iv = openssl_random_pseudo_bytes(16);
 
-        $ciphertext = openssl_encrypt($plaintext, $method, $key, OPENSSL_RAW_DATA, $iv);
-        $hash = hash_hmac('sha256', $ciphertext . $iv, $key, true);
-
-        return $iv . $hash . $ciphertext;
-    }
-
-    function decrypt($ivHashCiphertext, $password) {
-        $method = "AES-256-CBC";
-        $iv = substr($ivHashCiphertext, 0, 16);
-        $hash = substr($ivHashCiphertext, 16, 32);
-        $ciphertext = substr($ivHashCiphertext, 48);
-        $key = hash('sha256', $password, true);
-
-        if (!hash_equals(hash_hmac('sha256', $ciphertext . $iv, $key, true), $hash)) return null;
-
-        return openssl_decrypt($ciphertext, $method, $key, OPENSSL_RAW_DATA, $iv);
-    }
 
     protected function lendingKyc(Array $data)
     {
