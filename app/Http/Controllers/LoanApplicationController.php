@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Bank;
 use App\LendingKYC;
 use App\LoanClassofService;
 use App\LoanHistory;
@@ -209,6 +210,10 @@ class LoanApplicationController extends Controller
         }catch (\Exception $exception){
             return response(['code' => '100', 'description' => 'Please contact support for assistance.',],500);
         }
+    }
+
+    public function banks(){
+        return response([Bank::all()]);
     }
 
 
