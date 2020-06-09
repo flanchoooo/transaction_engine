@@ -53,7 +53,7 @@ class LoanApplicationController extends Controller
                 $application->loan_cos = $request->loan_cos;
                 $application->status = 'PENDING DOCUMENT UPLOAD';
                 $application->employee_reference = 'XEC';
-                $application->loan_duration = $lendingProfile->loan_tenure;
+                $application->tenure = $lendingProfile->tenure;
                 $application->description = 'Loan application successfully submitted, pending document uploads';
                 $lendingProfile->initial_amount =0;
                 $lendingProfile->save();
@@ -77,7 +77,7 @@ class LoanApplicationController extends Controller
             $application->status = 'PENDING APPROVAL';
             $application->employee_reference = 'XEC';
             $application->description = 'Loan application successfully submitted';
-            $application->loan_duration = $request->tenure;
+            $application->tenure  = $request->tenure;
             $lendingProfile->initial_amount =0;
             $lendingProfile->save();
             $application->save();
@@ -89,7 +89,7 @@ class LoanApplicationController extends Controller
                 'monthly_installments'  => $repayment,
                 'draw_down_fee'         => $loanClass->draw_down_fee,
                 'establishment_fee'     => $loanClass->establishment_fee,
-               'data'                  =>$application
+                'data'                  =>$application
             ]);
         }catch (\Exception $exception){
             DB::rollback();

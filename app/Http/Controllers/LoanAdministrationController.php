@@ -86,8 +86,8 @@ class LoanAdministrationController extends Controller
             }
 
             if($request->status == 'AUTHORIZED'){
-                $loanFees = $this->simpleInterest($updateLoan->amount, $loanClassOfService->interest_rate,$updateLoan->loan_duration,$loanClassOfService->establishment_fee,$loanClassOfService->draw_down_fee);
-                for ($x = 1; $x <= $updateLoan->loan_duration; $x++) {
+                $loanFees = $this->simpleInterest($updateLoan->amount, $loanClassOfService->interest_rate,$updateLoan->tenure,$loanClassOfService->establishment_fee,$loanClassOfService->draw_down_fee);
+                for ($x = 1; $x <= $updateLoan->tenure; $x++) {
                   $loanProfile = new LoanEngine();
                   $loanProfile->loan_amount = $updateLoan->amount;
                   $loanProfile->monthly_installments = $loanFees["monthly_installments"];
@@ -241,7 +241,7 @@ class LoanAdministrationController extends Controller
                 'description'       => 'Success',
                 'loan_profile'      => $loansByApplicant,
                 'loan_applicant'    => $applicant,
-                'loan_balance'      =>  $loans_sum - $sumPaid
+                'loan_balance'      => $loans_sum - $sumPaid
             ];
             return response(
                 $data
