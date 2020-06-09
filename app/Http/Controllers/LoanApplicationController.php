@@ -45,7 +45,7 @@ class LoanApplicationController extends Controller
             }
 
             $loanClass = LoanClassofService::find($request->loan_cos);
-            $repayment = $this->calcPmt($request->amount,$loanClass->interest_rate,$request->loan_tenure);
+            $repayment = $this->calcPmt($request->amount,$loanClass->interest_rate,$request->tenure);
             if($lendingProfile->initial_amount > 0){
                 $application = new Loans();
                 $application->applicant_id = $lendingProfile->id;
@@ -224,7 +224,7 @@ class LoanApplicationController extends Controller
             'amount'            => 'required',
             'email'             => 'required',
             'loan_cos'          => 'required',
-            'loan_tenure'       => 'required',
+            'tenure'       => 'required',
         ]);
 
 
