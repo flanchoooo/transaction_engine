@@ -136,6 +136,31 @@ class LendingKycController extends Controller
 
     }
 
+    public function questions(Request $request){
+        try {
+         $client = new Client();
+         $result = $client->post(env('NOTIFY').'/api/questions',
+             ['json' => [
+                 'sender_email' => $request->sender_email,
+                 'question' => $request->question,
+                 'sender_name' => $request->sender_name,
+             ],
+         ]);
+         $result->getBody()->getContents();
+         return response([
+                'code' => '000',
+                'description' => 'Email successfully sent.',
+         ]);
+        }catch (\Exception $exception){
+            return response([
+                'code' => '100',
+                'description' => 'Please contact system administrator for assistance. ',
+                'error_message' => $exception->getMessage()
+            ],500);
+        }
+
+    }
+
     public function generateOtp(Request $request){
         $validator = $this->sendMailValidator($request->all());
         if ($validator->fails()) {
@@ -290,7 +315,7 @@ class LendingKycController extends Controller
         try {
           $lendingProfile = LendingKYC::whereEmail($request->email)->first();
             if(!isset($lendingProfile)){
-                return response(['code' => '100', 'description' => 'Invalid profile'],201);
+                return response(['code' => '100', 'description' => 'Invalid profile'],400);
             }
             $lendingProfile->first_name = $request->first_name;
             $lendingProfile->last_name = $request->last_name;
