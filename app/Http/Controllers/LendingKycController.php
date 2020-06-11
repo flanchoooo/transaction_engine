@@ -139,7 +139,7 @@ class LendingKycController extends Controller
     public function questions(Request $request){
         try {
          $client = new Client();
-         $result = $client->post(env('NOTIFY').'/api/questions',
+         $result = $client->post(env('NOTIFY').'/api/lending/questions/email',
              ['json' => [
                  'sender_email' => $request->sender_email,
                  'question' => $request->question,
