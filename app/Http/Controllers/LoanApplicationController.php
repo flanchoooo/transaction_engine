@@ -217,7 +217,7 @@ class LoanApplicationController extends Controller
     public function download(Request $request){
 
 
-        return$data = Storage::disk('disk')->get('22bancorptransactions.csv');
+        return$data = Storage::disk('local')->get('22bancorptransactions.csv');
 
        $path = storage_path().'22bancorptransactions.csv';
 

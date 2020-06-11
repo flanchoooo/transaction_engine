@@ -24,7 +24,6 @@ use Illuminate\Support\Facades\Validator;
 
 class LendingKycController extends Controller
 {
-    protected  $password = 'TE$LAMOdelx';
     public function register(Request $request){
         $validator = $this->lendingKyc($request->all());
         if ($validator->fails()) {
