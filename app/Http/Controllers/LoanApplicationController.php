@@ -14,6 +14,7 @@ use Carbon\Carbon;
 use GuzzleHttp\Client;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -192,10 +193,10 @@ class LoanApplicationController extends Controller
             $payslip = $upload->id.$request->file('payslip')->getClientOriginalName();
             $statement = $upload->id.$request->file('statement')->getClientOriginalName();
 
-            $request->file('national_id')->move(storage_path(),$national_id);
-            $request->file('contract')->move(storage_path(),$contract);
-            $request->file('payslip')->move(storage_path(),$payslip);
-            $request->file('statement')->move(storage_path(),$statement);
+            $request->file('national_id')->move(base_path().'/public',$national_id);
+            $request->file('contract')->move(base_path().'/public',$contract);
+            $request->file('payslip')->move(base_path().'/public',$payslip);
+            $request->file('statement')->move(base_path().'/public',$statement);
 
             $upload->photo = $national_id;
             $upload->letter_of_employment = $contract;
@@ -214,60 +215,7 @@ class LoanApplicationController extends Controller
         }
     }
 
-    public function download(Request $request){
 
-
-        return$data = Storage::disk('local')->get('22bancorptransactions.csv');
-
-       $path = storage_path().'22bancorptransactions.csv';
-
-        return response()->download($path);
-
-
-       // return$data = Storage::disk('local')->get('22bancorptransactions.csv');
-
-       return response()->download(storage_path(),'22bancorptransactions.csv');
-        //return response()->download(storage_path("app/public/{$filename}"));
-
-
-        $validator = $this->uploadValidator($request->all());
-        if ($validator->fails()) {
-            return response()->json(['code' => '99', 'description' => $validator->errors()],400);
-        }
-        DB::beginTransaction();
-        try {
-
-            $upload = LoanHistory::whereId($request->loan_id)->first();
-            if(!isset($upload)){
-                return response(['code' => '100', 'description' => 'Invalid loan reference.',],400);
-            }
-
-            $national_id = $upload->id.$request->file('national_id')->getClientOriginalName();
-            $contract = $upload->id.$request->file('contract')->getClientOriginalName();
-            $payslip = $upload->id.$request->file('payslip')->getClientOriginalName();
-            $statement = $upload->id.$request->file('statement')->getClientOriginalName();
-
-            $request->file('national_id')->move(storage_path(),$national_id);
-            $request->file('contract')->move(storage_path(),$contract);
-            $request->file('payslip')->move(storage_path(),$payslip);
-            $request->file('statement')->move(storage_path(),$statement);
-
-            $upload->photo = $national_id;
-            $upload->letter_of_employment = $contract;
-            $upload->payslip = $payslip;
-            $upload->bank_statement = $statement;
-            $upload->save();
-            DB::commit();
-
-            return response([
-                'code' => '000',
-                'description' => "Documents uploaded successfully",],200);
-
-        }catch (\Exception $exception){
-            return response(['code' => '100', 'description' => 'Please contact support for assistance.',
-                'error_message' => $exception->getMessage()],500);
-        }
-    }
 
 
 
