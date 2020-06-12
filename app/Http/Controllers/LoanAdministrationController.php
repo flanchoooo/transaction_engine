@@ -31,7 +31,7 @@ class LoanAdministrationController extends Controller
             return response(['code' => '100', 'description' => 'Please contact support for assistance.',],500);
         }
     }
-
+    
     public function updateLoansApplication(Request $request){
         $validator = $this->updateLoansApplicationValidator($request->all());
         if ($validator->fails()) {

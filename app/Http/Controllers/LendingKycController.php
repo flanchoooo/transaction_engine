@@ -256,8 +256,6 @@ class LendingKycController extends Controller
     }
 
     public function login(Request $request){
-
-
         $validator = $this->loginValidator($request->all());
         if ($validator->fails()) {
             return response()->json(['code' => '99', 'description' => $validator->errors()],400);
@@ -344,7 +342,6 @@ class LendingKycController extends Controller
         }
 
     }
-
 
 
     protected function lendingKyc(Array $data)

@@ -215,13 +215,41 @@ class LoanApplicationController extends Controller
         }
     }
 
-
-
-
-
     public function banks(){
         return response([Bank::all()]);
     }
+
+    public function applicantInfo(Request $request){
+        $validator = $this->applicantInfoValidator($request->all());
+        if ($validator->fails()) {
+            return response()->json(['code' => '99', 'description' => $validator->errors()],400);
+        }
+        DB::beginTransaction();
+        try {
+            $lendingProfile = LendingKYC::whereEmail($request->email)->first();
+            if(!isset($lendingProfile)){
+                return response(['code' => '100', 'description' => 'Invalid user email'],400);
+            }
+            $loan_history = LoanHistory::whereApplicantId($lendingProfile->id)->get();
+            return response([
+
+                'code'          => '00',
+                'description'   => 'success',
+                'user_data'     => $lendingProfile,
+                'loan_data'     => $loan_history
+
+            ]);
+        }catch (\Exception $exception){
+            DB::rollback();
+            return response(['code' => '100',
+                'description' => 'Please contact system administrator for assistance.',
+                'error_message' => $exception->getMessage()],500);
+        }
+
+    }
+
+
+
 
 
 
@@ -264,6 +292,15 @@ class LoanApplicationController extends Controller
             'contract'=> 'required',
              'payslip'            => 'required',
 
+        ]);
+
+
+    }
+
+    protected function applicantInfoValidator(Array $data)
+    {
+        return Validator::make($data, [
+             'email'            => 'required',
         ]);
 
 
