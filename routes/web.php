@@ -187,12 +187,19 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
     $app->get('/lending/download/documents',  'LoanApplicationController@download');
     $app->post('/lending/pending/approval',  'LoanApplicationController@pendingApproval');
     $app->get('/lending/banks',  'LoanApplicationController@banks');
-    $app->post('/lending/applicant/information',  'LoanApplicationController@applicantInfo');
+    $app->post('
+    ',  'LoanApplicationController@applicantInfo');
 
     //Loan Administration Controller
     $app->get('/lending/pending/approval','LoanAdministrationController@pendingApprovals');
     $app->post('/lending/update', 'LoanAdministrationController@updateLoansApplication');
     $app->post('/lending/download/kyc',  'LoanAdministrationController@pendingApprovals');
+    $app->get('/lending/disbursements',  'LoanAdministrationController@disbursements');
+    $app->get('/lending/disburse',  'LoanAdministrationController@disburse');
+    $app->get('/lending/cos/display',  'LoanAdministrationController@getLoanCOS');
+    $app->post('/lending/cos/create',  'LoanAdministrationController@createLoanCOS');
+    $app->post('/lending/cos/id',  'LoanAdministrationController@cosById');
+    $app->post('/lending/cos/updates',  'LoanAdministrationController@updateCos');
 
 
     //Loan profile

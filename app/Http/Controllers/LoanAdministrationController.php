@@ -31,6 +31,36 @@ class LoanAdministrationController extends Controller
             return response(['code' => '100', 'description' => 'Please contact support for assistance.',],500);
         }
     }
+
+    public function disbursements(){
+        try {
+            return response(
+                LoanHistory::whereStatus('AUTHORIZED')->get()
+            );
+        }catch (\Exception $exception){
+            return response(['code' => '100', 'description' => 'Please contact support for assistance.',],500);
+        }
+    }
+
+    public function disburse(){
+
+        DB::beginTransaction();
+        try {
+
+                $disburse = LoanHistory::whereStatus('AUTHORIZED')->get();
+                foreach($disburse as $item){
+                    $item->status = 'DISBURSED';
+                    $item->description = 'Loan successfully disbursed.';
+                    $item->save();
+                    DB::commit();
+                }
+            return response(['code' => '00', 'description' => 'Loan successfully disbursed.',],200);
+
+        }catch (\Exception $exception){
+            return response(['code' => '100', 'description' => 'Please contact support for assistance.',
+                'error_message' => $exception->getMessage()],500);
+        }
+    }
     
     public function updateLoansApplication(Request $request){
         $validator = $this->updateLoansApplicationValidator($request->all());
@@ -250,6 +280,75 @@ class LoanAdministrationController extends Controller
             return response(['code' => '100', 'description' => 'Please contact support for assistance.', 'error_message' => $exception->getMessage()],500);
         }
     }
+
+    public function getLoanCOS(){
+        try {
+            return response(
+                LoanClassofService::all()
+            );
+        }catch (\Exception $exception){
+            return response(['code' => '100', 'description' => 'Please contact support for assistance.',
+                'error_message' => $exception->getMessage()],500);
+        }
+    }
+
+    public function createLoanCOS(Request $request){
+        DB::beginTransaction();
+        try {
+               $loanCOS = new LoanClassofService();
+               $loanCOS->minimum_amount =$request->minimum_amount;
+               $loanCOS->maximum_amount =$request->maximum_amount;
+               $loanCOS->establishment_fee =$request->establishment_fee;
+               $loanCOS->draw_down_fee =$request->draw_down_fee;
+               $loanCOS->interest_rate =$request->interest_rate;
+               $loanCOS->affordability_ratio =$request->affordability_ratio;
+               $loanCOS->formula =$request->formula;
+               $loanCOS->interest_rate =$request->interest_rate;
+               $loanCOS->save();
+               DB::commit();
+              return response(['code' => '00', 'description' => 'Loan Class of Service successfully created.',
+              ],200);
+
+        }catch (\Exception $exception){
+            return response(['code' => '100', 'description' => 'Please contact support for assistance.',
+                'error_message' => $exception->getMessage()],500);
+        }
+    }
+
+    public function cosById(Request $request){
+        DB::beginTransaction();
+        try {
+               $loanCOS = LoanClassofService::whereId($request->id)->first();
+               return response($loanCOS);
+        }catch (\Exception $exception){
+            return response(['code' => '100', 'description' => 'Please contact support for assistance.',
+                'error_message' => $exception->getMessage()],500);
+        }
+    }
+
+    public function updateCos(Request $request){
+        DB::beginTransaction();
+        try {
+            $loanCOS = LoanClassofService::whereId($request->id)->first();
+            $loanCOS->minimum_amount =$request->minimum_amount;
+            $loanCOS->maximum_amount =$request->maximum_amount;
+            $loanCOS->establishment_fee =$request->establishment_fee;
+            $loanCOS->draw_down_fee =$request->draw_down_fee;
+            $loanCOS->interest_rate =$request->interest_rate;
+            $loanCOS->affordability_ratio =$request->affordability_ratio;
+            $loanCOS->formula =$request->formula;
+            $loanCOS->interest_rate =$request->interest_rate;
+            $loanCOS->save();
+            DB::commit();
+            return response(['code' => '00', 'description' => 'Loan Class of Service successfully updated.',
+            ],200);
+
+        }catch (\Exception $exception){
+            return response(['code' => '100', 'description' => 'Please contact support for assistance.',
+                'error_message' => $exception->getMessage()],500);
+        }
+    }
+
 
     protected function updateLoansApplicationValidator(Array $data)
     {
