@@ -7,6 +7,8 @@ use App\Services\AESCtrl;
 use App\Services\AESEncryption;
 use App\Services\OTPService;
 use App\Wallet;
+use App\WalletTransactions;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -50,7 +52,15 @@ class WalletLoginController extends Controller
             }
 
             if (Hash::check($pin["pin"], $wallet->pin)) {
+                $total_debits = WalletTransactions::where('account_debited',$request->mobile)
+                    ->where('created_at', '>', Carbon::now()->subDays(1))
+                    ->where('reversed', '!=', 1)
+                    ->sum('debit_amount');
 
+                $total_credits = WalletTransactions::where('account_credited',$request->mobile)
+                    ->where('created_at', '>', Carbon::now()->subDays(1))
+                    ->where('reversed', '!=', 1)
+                    ->sum('credit_amount');
 
                 if($wallet->device_uuid != $request->device_uuid){
                     OTPService::generateOtp($request->mobile,'LOGIN');
@@ -65,7 +75,10 @@ class WalletLoginController extends Controller
                 $wallet->verified = 1;
                 $wallet->save();
                 DB::commit();
-                return response(['code' => '000', 'description' => 'Login successful', 'data'=> $wallet]);
+                return response(['code' => '000', 'description' => 'Login successful',
+                    'total_debits' => $total_debits,
+                    'total_credits' => $total_credits,
+                    'data'=> $wallet]);
             }
 
             $wallet->auth_attempts+=1;

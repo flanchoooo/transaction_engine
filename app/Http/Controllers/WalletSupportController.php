@@ -39,6 +39,7 @@ class WalletSupportController extends Controller
         }
 
         try {
+
             $history_credit = WalletHistory::where('account_credited', $request->source_mobile)
                 ->where('credit_amount', '>', 0)
                 ->orderBy('id', 'desc')->take(10)
@@ -52,17 +53,23 @@ class WalletSupportController extends Controller
             $result = [];
             $total_history = $history_credit->merge($history_debit)->sortByDesc('id');
             foreach ($total_history as $item) {
+                if($item['debit_amount'] !=  0){
+                    $type = 'DEBIT';
+                }else{
+                    $type = 'CREDIT';
+                }
                 $temp = array(
-                    'id' => $item['id'],
-                    'transaction_type' => TransactionType::find($item['txn_type_id'])->name,
-                    'date' => \Carbon\Carbon::parse($item->created_at)->format('d M Y'),
-                    'debit' => $item['transaction_amount'],
-                    'credit' => $item['transaction_amount'],
-                    'balance_before' => $item['balance_before'],
+                    'id'            => $item['id'],
+                    'description'   => TransactionType::find($item['txn_type_id'])->name,
+                    'type'          => $type,
+                    'date'          => \Carbon\Carbon::parse($item->created_at)->format('d M Y'),
+                    'debit'         => $item['debit_amount'],
+                    'credit'        => $item['credit_amount'],
+                    'balance_before'=> $item['balance_before'],
                     'balance_after' => $item['balance_after'],
-                    'fees' => $item['fees'],
-                    'tax' => $item['tax'],
-                    'reference' => $item['transaction_reference'],
+                    'fees'          => $item['fees'],
+                    'tax'           => $item['tax'],
+                    'reference'     => $item['transaction_reference'],
                 );
                 array_push($result, $temp);
             }

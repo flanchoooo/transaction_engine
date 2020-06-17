@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 
 
+use App\Services\AESCtrl;
 use App\Services\AESEncryption;
 use App\Services\WalletFeesCalculatorService;
 use App\TransactionType;
@@ -23,6 +24,14 @@ use Illuminate\Support\Facades\Validator;
 class WalletSendMoneyController extends Controller
 {
     public function sendMoney(Request $request){
+
+        $monthly_spent =  WalletTransactions::where('account_debited',$source_mobile)
+            ->where('created_at', '>', Carbon::now()->subDays(30))
+            ->where('reversed', '!=', 1)
+            ->whereIn('txn_type_id', [SEND_MONEY,CASH_PICK_UP])
+            ->sum('transaction_amount');
+
+
         $validator = $this->wallet_send_money($request->all());
         if ($validator->fails()) {
             return response()->json(['code' => '99', 'description' => $validator->errors()],400);
@@ -74,19 +83,19 @@ class WalletSendMoneyController extends Controller
                 $source->auth_attempts+=1;
                 $source->save();
                 DB::commit();
-                return response(['code' => '807', 'description' => 'Invalid credentials'],201);
+                return response(['code' => '807', 'description' => 'Invalid credentials'],400);
             }
 
             if (!Hash::check($pin["pin"], $source->pin)) {
                 $source->auth_attempts += 1;
                 $source->save();
                 DB::commit();
-                return response(['code' => '100', 'description' => 'Invalid credentials'],201);
+                return response(['code' => '100', 'description' => 'Invalid credentials'],400);
             }
 
             $wallet_fees = WalletFeesCalculatorService::calculateFees($request->amount,SEND_MONEY);
             if($wallet_fees["code"] != "00"){
-                return response(['code'=> '100', 'description' => 'Invalid transaction amount.'],201);
+                return response(['code'=> '100', 'description' => 'Invalid transaction amount.'],400);
             }
 
             $total_deductions = $wallet_fees["fees_charged"] + $request->amount;
