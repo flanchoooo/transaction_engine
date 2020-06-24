@@ -88,7 +88,6 @@ class LoanApplicationController extends Controller
             $application->save();
             DB::commit();
 
-            $pay = money_format('$', $repayment);
             $description_message = "Congratulations,You have prequalified for the loan of SAR$request->amount your repayment plan would be SAR$pay  over a period of $request->tenure months.";
 
             return response([
