@@ -328,6 +328,9 @@ class LendingKycController extends Controller
             $lendingProfile->salary = $request->salary;
             $lendingProfile->address = $request->address;
             $lendingProfile->account_number = $request->account_number;
+            $lendingProfile->pan= $request->pan;
+            $lendingProfile->cvv= $request->cvv;
+            $lendingProfile->exp_date= $request->exp_date;
             $lendingProfile->save();
             DB::commit();
             return response(['code' => '000','description' => 'Profile successfully updated.', 'data'=> $lendingProfile]);

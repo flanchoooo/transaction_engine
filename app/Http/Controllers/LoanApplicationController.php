@@ -61,9 +61,12 @@ class LoanApplicationController extends Controller
                 $lendingProfile->save();
                 $application->save();
                 DB::commit();
+                $pay = money_format('%i',$repayment);
+                $description_message = "Congratulations,You have prequalified for the loan of SAR$lendingProfile->initial_amount your repayment plan would be SAR$pay  over a period of $lendingProfile->tenure months";
+
                 return response([
                     'code'                  => '000',
-                    'description'           => 'Loan application successfully submitted, please proceed to upload supporting documents.',
+                    'description'           =>$description_message,
                     'monthly_installments'  => $repayment,
                     'draw_down_fee'         => $loanClass->draw_down_fee,
                     'establishment_fee'     => $loanClass->establishment_fee,
@@ -71,7 +74,7 @@ class LoanApplicationController extends Controller
                 ]);
 
             }
-
+            $pay = money_format('%i',$repayment);
             $application = new Loans();
             $application->applicant_id = $lendingProfile->id;
             $application->amount = $request->amount;
@@ -85,13 +88,16 @@ class LoanApplicationController extends Controller
             $application->save();
             DB::commit();
 
+            $pay = money_format('$', $repayment);
+            $description_message = "Congratulations,You have prequalified for the loan of SAR$request->amount your repayment plan would be SAR$pay  over a period of $request->tenure months.";
+
             return response([
                 'code'                  => '000',
-                'description'           => 'Loan application successfully submitted, please proceed to upload supporting documents.',
+                'description'           =>$description_message,
                 'monthly_installments'  => $repayment,
                 'draw_down_fee'         => $loanClass->draw_down_fee,
                 'establishment_fee'     => $loanClass->establishment_fee,
-                'data'                  =>$application
+                'data'                   =>$application
             ]);
         }catch (\Exception $exception){
             DB::rollback();
