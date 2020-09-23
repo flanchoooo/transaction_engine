@@ -199,7 +199,6 @@ class WalletSignUpController extends Controller
             'first_name'        => 'required | max:64',
             'last_name'         => 'required',
             'nationality'       => 'required',
-            'national_id'       => 'required',
             'pin'               => 'required',
             'biometric'         => 'required',
             'device_uuid'       => 'required',
