@@ -62,7 +62,7 @@ class WalletLoginController extends Controller
                     ->where('reversed', '!=', 1)
                     ->sum('credit_amount');
 
-                if($wallet->device_uuid != $request->device_uuid){
+            /* if($wallet->device_uuid != $request->device_uuid){
                     OTPService::generateOtp($request->mobile,'LOGIN');
                     return response(['code' => '112', 'description' => 'Please provide OTP',]);
                 }
@@ -71,6 +71,7 @@ class WalletLoginController extends Controller
                     OTPService::generateOtp($request->mobile,'LOGIN');
                     return response(['code' => '113', 'description' => 'Please provide OTP',]);
                 }
+            */
                 $wallet->auth_attempts = 0;
                 $wallet->verified = 1;
                 $wallet->save();
