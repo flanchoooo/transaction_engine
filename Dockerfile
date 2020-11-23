@@ -31,7 +31,7 @@ RUN mv .env.prod .env
 ADD  httpd.conf /etc/httpd/conf/httpd.conf
 ADD  welcome.conf /etc/httpd/conf.d/welcome.conf
 
-RUN chown -R apache:apache /var/www/html/storage/ /var/www/html/bootstrap/cache/ \
+RUN chown -R apache:apache /var/www/html/storage/ \
     && composer install --no-dev \
     && php artisan cache:clear
 
