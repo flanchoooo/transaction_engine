@@ -5,8 +5,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: famethe/api-engine
-    container_name: apiEngine
+    image: ta/advanceBank
+    container_name: cbaApp
     restart: always
     network_mode: host
     ports:
