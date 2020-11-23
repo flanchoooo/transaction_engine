@@ -5,8 +5,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ta/advanceBank
-    container_name: cbaApp
+    image: ta/advancebank
+    container_name: cbaapp
     restart: always
     network_mode: host
     ports:
