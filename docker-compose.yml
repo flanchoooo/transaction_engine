@@ -1,0 +1,16 @@
+version: "3.1"
+
+services:
+  laravel_cards:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: famethe/api-engine
+    container_name: apiEngine
+    restart: always
+    network_mode: host
+    ports:
+    - 9000:8080
+
+
+

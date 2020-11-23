@@ -216,6 +216,9 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
     $app->get('pending_approvals',  'WalletEValueController@all_destroy_value');
 
 
+    //CBA-CORE
+    $app->post('balance/enquiry',  'CBAController@balanceEnquiry');
+
 
 });
 
