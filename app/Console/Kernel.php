@@ -13,17 +13,6 @@ class Kernel extends ConsoleKernel
      * @var array
      */
     protected $commands = [
-        \App\Console\Commands\Txns::class,
-        \App\Console\Commands\Purchase::class,
-        \App\Console\Commands\Cash::class,
-        \App\Console\Commands\SettleRevenue::class,
-        \App\Console\Commands\MdrDeduction::class,
-        \App\Console\Commands\PenaltyDeduction::class,
-        \App\Console\Commands\REVERSAL::class,
-        \App\Console\Commands\FAILED::class,
-        \App\Console\Commands\FailedPurchase::class,
-        \App\Console\Commands\WalletSettlement::class,
-        \App\Console\Commands\FailedBalance::class,
         \App\Console\Commands\ProcessPendingTransaction::class
     ];
 
