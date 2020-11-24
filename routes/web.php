@@ -218,6 +218,9 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
 
     //CBA-CORE
     $app->post('balance/enquiry',  'CBAController@balanceEnquiry');
+    $app->post('incoming/transfer',  'CBAController@incomingTransfer');
+    $app->post('outgoing/transfer',  'CBAController@outgoingTransfer');
+    $app->post('purchase',  'CBAController@purchase');
 
 
 });

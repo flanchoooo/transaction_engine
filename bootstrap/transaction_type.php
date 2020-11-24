@@ -12,6 +12,8 @@ define('REVENUE','001201000124402');
 define('PAY_MERCHANT','5');
 define('PAYMENT_RECEIVED','6');
 define('BALANCE','7');
+define('ISW','1005758888');
+define('CREDIT TRANSFER','8');
 
 
 
