@@ -75,7 +75,7 @@ class CBAController extends Controller
                 return response(['code' => '100', 'description' => 'Invalid credentials'],400);
             }*/
 
-            $wallet_fees = WalletFeesCalculatorService::calculateFees(1,BALANCE);
+            $wallet_fees = WalletFeesCalculatorService::calculateFees(1,7);
             if($wallet_fees["code"] != "00"){
                 return response(['code'=> '100', 'description' => 'Invalid transaction amount.'],400);
             }
@@ -96,7 +96,7 @@ class CBAController extends Controller
             $revenue->save();
 
             $transaction                    = new WalletTransactions();
-            $transaction->txn_type_id       = BALANCE;
+            $transaction->txn_type_id       = 7;
             $transaction->tax               =  $wallet_fees['tax'];
             $transaction->fees              =  $wallet_fees['revenue_fees'];
             $transaction->transaction_amount= $request->amount;
