@@ -221,6 +221,7 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
     $app->post('outgoing/transfer',  'CBAController@outgoingTransfer');
     $app->post('purchase',  'CBAController@purchase');
     $app->get('/reversal/{id}',  'ReversalsController@reversals');
+    $app->post('/internal/transfer',  'CBAController@sendMoney');
 
 });
 
