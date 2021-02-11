@@ -12,7 +12,7 @@
 */
 
 $router->get('/', function () use ($router) {
-    return 'ADVANCE-BANK-WALLET-SERVICE: AUTHOR: FLAVIAN .T. MACHIMBIRIKE' .'  '. $router->app->version();
+    return 'Bancorp Application: AUTHOR: FLAVIAN .T. MACHIMBIRIKE';
 });
 
 
@@ -223,7 +223,13 @@ $router->group(['prefix'=>'api/', 'middleware' => 'BasicAuth'], function($app) {
     $app->get('/reversal/{id}',  'ReversalsController@reversals');
     $app->post('/internal/transfer',  'CBAController@sendMoney');
 
+    //Brass
+    $app->get('/v1/banks','BrassController@banks');
+    $app->post('/v1/customer/information','BrassController@customerInformation');
+
 });
+
+
 
 
 

@@ -103,8 +103,6 @@ class FeesCalculatorService
         if ($merchant_id) {
 
             $merchant_service_commission = (string)$amount * ($mdr->mdr / 100);
-
-
         }
 
         $account_class = substr($account, 3, 3);

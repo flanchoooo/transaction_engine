@@ -14,21 +14,16 @@ class BasicAuthMiddleware
      * @return mixed
      */
     public function handle($request, Closure $next) {
-        if($request->getUser() != 'admin' || $request->getPassword() != 'admin') {
+        /*if($request->getUser() != 'admin' || $request->getPassword() != 'admin') {
             $headers = array('WWW-Authenticate' => 'Basic');
-
             $return =  array(
                 'code' => '01',
                 'description' => 'Unauthorized',
 
             );
-
             return response($return , 401, $headers);
 
-
-
-
-        }
+        }*/
         return $next($request);
     }
 }
